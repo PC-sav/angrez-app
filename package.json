@@ -6,6 +6,7 @@
     "eventemitter3": "^5.0.4",
     "expo": "~56.0.11",
     "expo-av": "^16.0.8",
+    "expo-dev-client": "^56.0.20",
     "expo-speech-recognition": "^56.0.1",
     "expo-status-bar": "~56.0.4",
     "react": "19.2.3",
