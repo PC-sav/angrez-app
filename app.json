@@ -10,7 +10,11 @@
     "jsEngine": "hermes",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.angrez.app"
+      "bundleIdentifier": "com.angrez.app",
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Angrez को आपकी आवाज़ सुनने के लिए अनुमति चाहिए।",
+        "NSMicrophoneUsageDescription": "Angrez को बोलने के लिए माइक्रोफोन चाहिए।"
+      }
     },
     "android": {
       "package": "com.angrez.app",
@@ -37,6 +41,11 @@
           "speechRecognitionPermission": "Angrez को आपकी आवाज़ सुनने के लिए अनुमति चाहिए।"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "cc234316-bd57-4917-a6df-2b5d8bcc1182"
+      }
+    }
   }
 }
