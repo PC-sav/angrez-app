@@ -1,25 +1,41 @@
 {
   "expo": {
-    "name": "angrez-app",
+    "name": "Angrez",
     "slug": "angrez-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "jsEngine": "hermes",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.angrez.app"
     },
     "android": {
+      "package": "com.angrez.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.INTERNET"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Angrez को बोलने के लिए माइक्रोफोन चाहिए।",
+          "speechRecognitionPermission": "Angrez को आपकी आवाज़ सुनने के लिए अनुमति चाहिए।"
+        }
+      ]
+    ]
   }
 }
