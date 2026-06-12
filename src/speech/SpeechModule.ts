@@ -9,6 +9,7 @@ import {
   type ExpoSpeechRecognitionNativeEventMap,
 } from 'expo-speech-recognition';
 import { EventEmitter } from 'eventemitter3';
+import { Alert } from 'react-native';
 
 export type SpeechState = 'idle' | 'listening';
 
@@ -29,8 +30,25 @@ class SpeechModule extends EventEmitter<SpeechEvents> {
   }
 
   async requestPermission(): Promise<boolean> {
-    const { status } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-    return status === 'granted';
+    try {
+      const { status } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'माइक की अनुमति',
+          'माइक की अनुमति चाहिए — सेटिंग्स में जाकर ऑन करें',
+          [{ text: 'ठीक है' }],
+        );
+        return false;
+      }
+      return true;
+    } catch {
+      Alert.alert(
+        'माइक की अनुमति',
+        'माइक की अनुमति चाहिए — सेटिंग्स में जाकर ऑन करें',
+        [{ text: 'ठीक है' }],
+      );
+      return false;
+    }
   }
 
   async startListening(): Promise<void> {
@@ -53,7 +71,15 @@ class SpeechModule extends EventEmitter<SpeechEvents> {
       ExpoSpeechRecognitionModule.addListener(
         'error',
         (evt: ExpoSpeechRecognitionNativeEventMap['error']) => {
-          this.emit('error', evt.message ?? 'Speech error');
+          if (evt.error === 'not-allowed' || evt.error === 'service-not-allowed') {
+            Alert.alert(
+              'माइक की अनुमति',
+              'माइक की अनुमति चाहिए — सेटिंग्स में जाकर ऑन करें',
+              [{ text: 'ठीक है' }],
+            );
+          } else {
+            this.emit('error', evt.message ?? 'Speech error');
+          }
           this.cleanup();
         },
       ),
