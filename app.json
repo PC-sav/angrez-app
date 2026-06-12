@@ -39,7 +39,9 @@
           "microphonePermission": "Angrez को बोलने के लिए माइक्रोफोन चाहिए।",
           "speechRecognitionPermission": "Angrez को आपकी आवाज़ सुनने के लिए अनुमति चाहिए।"
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-sqlite"
     ],
     "extra": {
       "eas": {
