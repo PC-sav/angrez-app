@@ -1,5 +1,10 @@
 export type AuthStackParamList = {
-  Otp: undefined;
+  LanguagePick: undefined;
+  Phone: undefined;
+  Otp: { phone: string; devOtp?: string };
+  OnboardingName: undefined;
+  OnboardingGoal: { name: string | null };
+  OnboardingDailyTime: { name: string | null; goal: string };
 };
 
 export type TabParamList = {
