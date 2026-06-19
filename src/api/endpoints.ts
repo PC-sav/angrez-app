@@ -185,6 +185,7 @@ export interface LessonPayload {
   micro_skill_l1: string;
   status: string;
   mastery_score: number;
+  warmup?: { audio?: string };
   teach: TeachItemDetailed[];
   practice: AnyPracticeItem[];
   review: unknown[];

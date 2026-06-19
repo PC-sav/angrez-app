@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Pressable, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
+import { useAudioPlayer } from 'expo-audio';
 import type {
   TeachItemDetailed, TeachPhraseItem, TeachExchangeItem,
 } from '../../api/endpoints';
 import { AudioButton } from './AudioButton';
+import { getAssetByPath } from '../../db/content';
+import { resolveAsset } from '../../api';
 import { LESSON } from '../../copy/lesson';
 
 // ── Immersion helper ──────────────────────────────────────────────────────────
@@ -70,11 +73,47 @@ function ExchangeCard({ item }: { item: TeachExchangeItem }) {
 
 interface Props {
   teach: TeachItemDetailed[];
+  warmup?: { audio?: string };
   onComplete: () => void;
 }
 
-export function TeachScreen({ teach, onComplete }: Props) {
+export function TeachScreen({ teach, warmup, onComplete }: Props) {
   const [index, setIndex] = useState(0);
+  const [warmupUri, setWarmupUri] = useState<string | null>(null);
+  const autoPlayedRef = useRef(false);
+
+  useEffect(() => {
+    const path = warmup?.audio;
+    if (!path) return;
+    (async () => {
+      try {
+        const cached = await getAssetByPath(path);
+        setWarmupUri(
+          cached?.status === 'downloaded' && cached.local_uri
+            ? cached.local_uri
+            : resolveAsset(path),
+        );
+      } catch (e) {
+        console.warn('[TeachScreen] warmup resolve failed:', e);
+        setWarmupUri(resolveAsset(path));
+      }
+    })();
+  }, [warmup?.audio]);
+
+  const warmupPlayer = useAudioPlayer(warmupUri);
+
+  useEffect(() => {
+    if (warmupUri && !autoPlayedRef.current) {
+      autoPlayedRef.current = true;
+      try {
+        warmupPlayer.seekTo(0);
+        warmupPlayer.play();
+      } catch (e) {
+        console.warn('[TeachScreen] warmup auto-play failed:', e);
+      }
+    }
+  }, [warmupUri, warmupPlayer]);
+
   const item = teach[index];
   const isLast = index === teach.length - 1;
 
@@ -91,6 +130,16 @@ export function TeachScreen({ teach, onComplete }: Props) {
     return null;
   }
 
+  const handleWarmupReplay = () => {
+    if (!warmupUri) return;
+    try {
+      warmupPlayer.seekTo(0);
+      warmupPlayer.play();
+    } catch (e) {
+      console.warn('[TeachScreen] warmup replay failed:', e);
+    }
+  };
+
   return (
     <View style={styles.root}>
       <View style={styles.progressRow}>
@@ -103,6 +152,11 @@ export function TeachScreen({ teach, onComplete }: Props) {
             ]}
           />
         </View>
+        {warmupUri && (
+          <Pressable onPress={handleWarmupReplay} hitSlop={8} accessibilityRole="button" accessibilityLabel="warmup replay">
+            <Text style={styles.warmupReplay}>🔊</Text>
+          </Pressable>
+        )}
       </View>
 
       <ScrollView
@@ -154,6 +208,9 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#4A90D9',
     borderRadius: 2,
+  },
+  warmupReplay: {
+    fontSize: 16,
   },
   scroll: {
     padding: 20,

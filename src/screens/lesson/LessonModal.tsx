@@ -168,6 +168,7 @@ export function LessonModal() {
       {lessonPhase === 'teach' && payload && (
         <TeachScreen
           teach={payload.teach}
+          warmup={payload.warmup}
           onComplete={handleTeachComplete}
         />
       )}

@@ -1,10 +1,6 @@
-/**
- * Plays a cached or remote audio file.
- * In-app playback requires expo-av: npx expo install expo-av && npx expo run:android
- * Until then, tapping opens the audio in the system media player via Linking.
- */
-import React, { useCallback, useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Pressable, StyleSheet, Text } from 'react-native';
+import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { getAssetByPath } from '../../db/content';
 import { resolveAsset } from '../../api';
 
@@ -13,30 +9,48 @@ interface Props {
   size?: 'normal' | 'large';
 }
 
-export function AudioButton({ remotePath, size = 'normal' }: Props) {
-  const [playing, setPlaying] = useState(false);
+let audioModeReady = false;
 
-  const handlePress = useCallback(async () => {
-    if (!remotePath || playing) return;
-    setPlaying(true);
+function ensureAudioMode() {
+  if (audioModeReady) return;
+  audioModeReady = true;
+  setAudioModeAsync({ playsInSilentMode: true }).catch(
+    (e) => console.warn('[audio] setAudioModeAsync failed:', e),
+  );
+}
+
+export function AudioButton({ remotePath, size = 'normal' }: Props) {
+  const [uri, setUri] = useState<string | null>(null);
+
+  useEffect(() => {
+    ensureAudioMode();
+    if (!remotePath) return;
+    (async () => {
+      try {
+        const cached = await getAssetByPath(remotePath);
+        setUri(
+          cached?.status === 'downloaded' && cached.local_uri
+            ? cached.local_uri
+            : resolveAsset(remotePath),
+        );
+      } catch (e) {
+        console.warn('[AudioButton] resolve failed:', e);
+        setUri(resolveAsset(remotePath));
+      }
+    })();
+  }, [remotePath]);
+
+  const player = useAudioPlayer(uri);
+
+  const handlePress = () => {
+    if (!uri) return;
     try {
-      let uri: string;
-      const cached = await getAssetByPath(remotePath);
-      if (cached?.status === 'downloaded' && cached.local_uri) {
-        uri = cached.local_uri;
-      } else {
-        uri = resolveAsset(remotePath);
-      }
-      const canOpen = await Linking.canOpenURL(uri);
-      if (canOpen) {
-        await Linking.openURL(uri);
-      }
+      player.seekTo(0);
+      player.play();
     } catch (e) {
-      console.warn('[AudioButton] failed:', e);
-    } finally {
-      setPlaying(false);
+      console.warn('[AudioButton] playback failed:', e);
     }
-  }, [remotePath, playing]);
+  };
 
   if (!remotePath) return null;
 
@@ -48,7 +62,7 @@ export function AudioButton({ remotePath, size = 'normal' }: Props) {
       accessibilityLabel="ऑडियो सुनें"
     >
       <Text style={[styles.icon, size === 'large' && styles.iconLarge]}>
-        {playing ? '⏸' : '🔊'}
+        {player.playing ? '⏸' : '🔊'}
       </Text>
     </Pressable>
   );
