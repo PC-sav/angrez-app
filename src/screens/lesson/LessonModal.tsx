@@ -7,7 +7,7 @@ import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/nativ
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { MainStackParamList } from '../../navigation/types';
-import { getCurrentPlan } from '../../db/content';
+import { getCurrentPlan, refreshCurrentPlan } from '../../db/content';
 import type { LessonPayload, SubstageCompleteResponse } from '../../api/endpoints';
 import { LESSON } from '../../copy/lesson';
 import { TeachScreen } from './TeachScreen';
@@ -124,6 +124,9 @@ export function LessonModal() {
   const handlePuzzlesComplete = useCallback((result: SubstageCompleteResponse) => {
     setCompletionResult(result);
     setLessonPhase('complete');
+    if (result.mastered && result.next_sub_stage_id) {
+      void refreshCurrentPlan();
+    }
   }, []);
 
   const handleReturn = useCallback(() => {

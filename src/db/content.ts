@@ -1,4 +1,5 @@
 import { openDB } from './schema';
+import { api } from '../api';
 
 // ── Row types ────────────────────────────────────────────────────────────────
 
@@ -219,5 +220,40 @@ export async function upsertAssetCache(row: AssetCacheRow): Promise<void> {
     );
   } catch (e) {
     console.warn('[DB] upsertAssetCache failed:', e);
+  }
+}
+
+// ── refreshCurrentPlan ───────────────────────────────────────────────────────
+
+/** Pull /plan/next and advance the local cache atomically.
+ *  Safe to call fire-and-forget; never throws. */
+export async function refreshCurrentPlan(): Promise<CurrentPlanRow | null> {
+  try {
+    const cached = await getCurrentPlan();
+    const planResp = await api.plan.next();
+    if (cached && cached.sub_stage_id !== planResp.data.sub_stage_id) {
+      await upsertSubstageProgress({
+        sub_stage_id:  cached.sub_stage_id,
+        pack_id:       cached.pack_id,
+        title_en:      cached.title_en,
+        title_l1:      cached.title_l1,
+        status:        'complete',
+        mastery_score: cached.mastery_score,
+      });
+    }
+    await upsertCurrentPlan({
+      pack_id:        planResp.data.pack_id,
+      sub_stage_id:   planResp.data.sub_stage_id,
+      title_en:       planResp.data.title_en,
+      title_l1:       planResp.data.title_l1,
+      micro_skill_l1: planResp.data.micro_skill_l1,
+      status:         planResp.data.status,
+      mastery_score:  planResp.data.mastery_score,
+      payload_json:   JSON.stringify(planResp.data),
+    });
+    return await getCurrentPlan();
+  } catch (e) {
+    console.warn('[refreshCurrentPlan] failed:', e);
+    return null;
   }
 }

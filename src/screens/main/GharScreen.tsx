@@ -12,8 +12,8 @@ import { useAppSelector } from '../../store/hooks';
 import { api, resolveAsset } from '../../api';
 import type { PlanNextResponse } from '../../api/endpoints';
 import {
-  getCurrentPlan, upsertCurrentPlan, upsertContentPack,
-  upsertSubstageProgress, upsertAssetCache, getAssetByPath,
+  getCurrentPlan, upsertContentPack, refreshCurrentPlan,
+  upsertAssetCache, getAssetByPath,
 } from '../../db/content';
 import type { CurrentPlanRow } from '../../db/content';
 import { MAIN } from '../../copy/main';
@@ -107,10 +107,7 @@ export function GharScreen() {
 
         // 2. Background refresh — never block on this
         try {
-          const [packsResp, planResp] = await Promise.all([
-            api.content.packs(),
-            api.plan.next(),
-          ]);
+          const packsResp = await api.content.packs();
           if (cancelled) return;
 
           // Upsert packs (replace on higher version)
@@ -118,47 +115,25 @@ export function GharScreen() {
             await upsertContentPack(pack);
           }
 
-          // Detect substage progression: if the server's current sub_stage_id
-          // differs from the cached one, the learner moved forward — archive the old one.
-          const newId = planResp.data.sub_stage_id;
-          if (cached && cached.sub_stage_id !== newId) {
-            await upsertSubstageProgress({
-              sub_stage_id: cached.sub_stage_id,
-              pack_id:      cached.pack_id,
-              title_en:     cached.title_en,
-              title_l1:     cached.title_l1,
-              status:       'complete',
-              mastery_score: cached.mastery_score,
-            });
-          }
-
-          const newPlan: Omit<CurrentPlanRow, 'cached_at'> = {
-            pack_id:       planResp.data.pack_id,
-            sub_stage_id:  planResp.data.sub_stage_id,
-            title_en:      planResp.data.title_en,
-            title_l1:      planResp.data.title_l1,
-            micro_skill_l1: planResp.data.micro_skill_l1,
-            status:        planResp.data.status,
-            mastery_score: planResp.data.mastery_score,
-            payload_json:  JSON.stringify(planResp.data),
-          };
-          await upsertCurrentPlan(newPlan);
-
+          const freshPlan = await refreshCurrentPlan();
           if (cancelled) return;
-          const freshPlan = await getCurrentPlan();
-          if (!cancelled && freshPlan) {
+          if (freshPlan) {
             setPlan(freshPlan);
             setInitialLoading(false);
           }
 
           // 3. Download assets for current sub-stage (non-blocking, progress shown on card)
-          setDownloadPct(0);
-          await downloadAssets(planResp.data, (pct) => {
-            if (!cancelled) setDownloadPct(pct);
-          });
-          if (!cancelled) setDownloadPct(null);
+          if (freshPlan?.payload_json) {
+            setDownloadPct(0);
+            const planData = JSON.parse(freshPlan.payload_json) as PlanNextResponse;
+            await downloadAssets(planData, (pct) => {
+              if (!cancelled) setDownloadPct(pct);
+            });
+            if (!cancelled) setDownloadPct(null);
+          }
 
-        } catch {
+        } catch (e) {
+          console.warn('[GharScreen] background refresh failed:', e);
           // Network failed — keep whatever cache we have; never show an error over it
           if (!cancelled) setInitialLoading(false);
         }
