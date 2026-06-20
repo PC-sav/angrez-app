@@ -285,7 +285,7 @@ export const api = {
 
     completeSubstage: (body: SubstageCompleteBody, opts?: Opts) =>
       client.post<SubstageCompleteResponse>(
-        `/api/substage/complete${__DEV__ ? '?dev_pass=true' : ''}`,
+        '/api/substage/complete',
         body,
         { signal: opts?.signal },
       ),
