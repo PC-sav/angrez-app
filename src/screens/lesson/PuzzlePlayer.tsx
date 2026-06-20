@@ -123,6 +123,7 @@ export function PuzzlePlayer({ practice, subStageId, onComplete }: Props) {
         sub_stage_id:    subStageId,
         transcript:      inputType === 'voice' ? text : null,
         input_type:      inputType,
+        used_voice:      inputType === 'voice',
         idempotency_key: key,
       };
 

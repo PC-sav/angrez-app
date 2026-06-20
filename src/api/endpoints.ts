@@ -196,6 +196,7 @@ export interface LessonResultBody {
   sub_stage_id: string;
   transcript: string | null;
   input_type: 'voice' | 'text' | 'tap';
+  used_voice: boolean;
   idempotency_key: string;
 }
 
