@@ -141,7 +141,9 @@ export function PuzzlePlayer({ practice, subStageId, onComplete }: Props) {
 
       try {
         const { data } = await api.lesson.submitResult(body);
-        await markSynced(key);
+        // Guard: data is null on the F2 503-ceiling resolve path; only mark synced
+        // on a genuine 200 with an award body — that path will throw below otherwise.
+        if (data?.award != null) await markSynced(key);
         setVerdict({
           correct:          data.correct,
           awardBase:        data.award?.base ?? 0,

@@ -46,6 +46,18 @@ export async function markSynced(idempotencyKey: string): Promise<void> {
   }
 }
 
+export async function markFailed(idempotencyKey: string): Promise<void> {
+  try {
+    const db = await openDB();
+    await db.runAsync(
+      `UPDATE sync_queue SET status = 'failed' WHERE idempotency_key = ?`,
+      [idempotencyKey],
+    );
+  } catch (e) {
+    console.warn('[DB] markFailed failed:', e);
+  }
+}
+
 export async function getPendingRows(): Promise<SyncQueueRow[]> {
   try {
     const db = await openDB();
