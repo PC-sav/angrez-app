@@ -15,6 +15,7 @@ import { api } from '../../api';
 import { speechModule } from '../../speech/SpeechModule';
 import type { SpeechState } from '../../speech/SpeechModule';
 import { insertSyncRow, markSynced } from '../../db/sync';
+import { serverAcceptedResult } from '../../api/puzzleResult';
 import { LESSON } from '../../copy/lesson';
 import { generateUUID } from './uuid';
 import { Waveform } from './Waveform';
@@ -143,7 +144,7 @@ export function PuzzlePlayer({ practice, subStageId, onComplete }: Props) {
         const { data } = await api.lesson.submitResult(body);
         // Guard: data is null on the F2 503-ceiling resolve path; only mark synced
         // on a genuine 200 with an award body — that path will throw below otherwise.
-        if (data?.award != null) await markSynced(key);
+        if (serverAcceptedResult(data)) await markSynced(key);
         setVerdict({
           correct:          data.correct,
           awardBase:        data.award?.base ?? 0,
