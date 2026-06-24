@@ -14,7 +14,8 @@ import type {
 import { api } from '../../api';
 import { speechModule } from '../../speech/SpeechModule';
 import type { SpeechState } from '../../speech/SpeechModule';
-import { insertSyncRow, markSynced } from '../../db/sync';
+import { insertSyncRow, markSynced, markFailed } from '../../db/sync';
+import axios from 'axios';
 import { serverAcceptedResult } from '../../api/puzzleResult';
 import { LESSON } from '../../copy/lesson';
 import { generateUUID } from './uuid';
@@ -122,7 +123,7 @@ export function PuzzlePlayer({ practice, subStageId, onComplete }: Props) {
       const body = {
         puzzle_id:       pid,
         sub_stage_id:    subStageId,
-        transcript:      inputType === 'voice' ? text : null,
+        transcript:      text,
         input_type:      inputType,
         used_voice:      inputType === 'voice',
         idempotency_key: key,
@@ -156,17 +157,33 @@ export function PuzzlePlayer({ practice, subStageId, onComplete }: Props) {
           transcript:       body.transcript,
           isNetworkError:   false,
         });
-      } catch {
-        // Network error — attempt already persisted; F6 will drain it.
-        setVerdict({
-          correct:          false,
-          awardBase:        0,
-          awardVoiceBonus:  0,
-          feedback_l1:      LESSON.speech.saved,
-          inputType,
-          transcript:       body.transcript,
-          isNetworkError:   true,
-        });
+      } catch (err) {
+        const is4xx =
+          axios.isAxiosError(err) &&
+          (err.response?.status === 400 || err.response?.status === 422);
+        if (is4xx) {
+          await markFailed(key);
+          setVerdict({
+            correct:         false,
+            awardBase:       0,
+            awardVoiceBonus: 0,
+            feedback_l1:     LESSON.speech.incorrect,
+            inputType,
+            transcript:      body.transcript,
+            isNetworkError:  false,
+          });
+        } else {
+          // Network error — attempt already persisted; F6 will drain it.
+          setVerdict({
+            correct:         false,
+            awardBase:       0,
+            awardVoiceBonus: 0,
+            feedback_l1:     LESSON.speech.saved,
+            inputType,
+            transcript:      body.transcript,
+            isNetworkError:  true,
+          });
+        }
       }
       setPhase('verdict');
     },
@@ -180,7 +197,23 @@ export function PuzzlePlayer({ practice, subStageId, onComplete }: Props) {
     const onLevel = (v: number) => setLevel(v);
 
     const onTranscript = (text: string, isFinal: boolean) => {
-      if (!isFinal || !text.trim()) return;
+      if (!isFinal) return;
+      if (!text.trim()) {
+        // Final recognition with no usable text — show warm verdict without submitting.
+        // Set gotTranscriptRef so onStateChange doesn't also trigger silence count.
+        gotTranscriptRef.current = true;
+        setVerdict({
+          correct:         false,
+          awardBase:       0,
+          awardVoiceBonus: 0,
+          feedback_l1:     LESSON.speech.silent,
+          inputType:       'voice',
+          transcript:      null,
+          isNetworkError:  false,
+        });
+        setPhase('verdict');
+        return;
+      }
       // Mark that this recording session produced speech before we stop it.
       gotTranscriptRef.current = true;
       submitAttempt('voice', text.trim());
@@ -422,12 +455,22 @@ export function PuzzlePlayer({ practice, subStageId, onComplete }: Props) {
               onChangeText={setFallbackText}
               returnKeyType="send"
               onSubmitEditing={() => {
-                if (fallbackText.trim()) submitAttempt('text', fallbackText.trim());
+                if (fallbackText.trim()) {
+                  submitAttempt('text', fallbackText.trim());
+                } else {
+                  setVerdict({ correct: false, awardBase: 0, awardVoiceBonus: 0, feedback_l1: LESSON.speech.silent, inputType: 'text', transcript: null, isNetworkError: false });
+                  setPhase('verdict');
+                }
               }}
             />
             <Pressable
               onPress={() => {
-                if (fallbackText.trim()) submitAttempt('text', fallbackText.trim());
+                if (fallbackText.trim()) {
+                  submitAttempt('text', fallbackText.trim());
+                } else {
+                  setVerdict({ correct: false, awardBase: 0, awardVoiceBonus: 0, feedback_l1: LESSON.speech.silent, inputType: 'text', transcript: null, isNetworkError: false });
+                  setPhase('verdict');
+                }
               }}
               style={styles.submitButton}
             >
