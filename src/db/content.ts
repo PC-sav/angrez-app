@@ -225,12 +225,23 @@ export async function upsertAssetCache(row: AssetCacheRow): Promise<void> {
 
 // ── refreshCurrentPlan ───────────────────────────────────────────────────────
 
+export type LockedSentinel = { locked: true; next_available_at: string };
+
 /** Pull /plan/next and advance the local cache atomically.
+ *  Returns LockedSentinel when the server signals daily_limit — does NOT
+ *  upsert in that case, preserving the stale cached plan in SQLite.
  *  Safe to call fire-and-forget; never throws. */
-export async function refreshCurrentPlan(): Promise<CurrentPlanRow | null> {
+export async function refreshCurrentPlan(): Promise<CurrentPlanRow | LockedSentinel | null> {
   try {
     const cached = await getCurrentPlan();
     const planResp = await api.plan.next();
+
+    // Gate: locked body has no sub_stage_id — bail before any SQLite write.
+    if (planResp.data.locked === true) {
+      return { locked: true, next_available_at: planResp.data.next_available_at };
+    }
+
+    // From here TypeScript narrows planResp.data to NextPlanResponse.
     if (cached && cached.sub_stage_id !== planResp.data.sub_stage_id) {
       await upsertSubstageProgress({
         sub_stage_id:  cached.sub_stage_id,

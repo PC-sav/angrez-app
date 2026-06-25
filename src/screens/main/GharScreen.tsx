@@ -10,7 +10,7 @@ import { File, Directory, Paths } from 'expo-file-system';
 import type { MainStackParamList } from '../../navigation/types';
 import { useAppSelector } from '../../store/hooks';
 import { api, resolveAsset } from '../../api';
-import type { PlanNextResponse } from '../../api/endpoints';
+import type { NextPlanResponse } from '../../api/endpoints';
 import {
   getCurrentPlan, upsertContentPack, refreshCurrentPlan,
   upsertAssetCache, getAssetByPath,
@@ -22,7 +22,7 @@ type Nav = NativeStackNavigationProp<MainStackParamList>;
 
 // ── Asset helpers ─────────────────────────────────────────────────────────────
 
-function extractAssetPaths(plan: PlanNextResponse): string[] {
+function extractAssetPaths(plan: NextPlanResponse): string[] {
   const paths: string[] = [];
   for (const item of plan.teach ?? []) {
     if (item.audio) paths.push(item.audio);
@@ -40,7 +40,7 @@ function extractAssetPaths(plan: PlanNextResponse): string[] {
 }
 
 async function downloadAssets(
-  plan: PlanNextResponse,
+  plan: NextPlanResponse,
   onProgress: (pct: number) => void,
 ): Promise<void> {
   const paths = extractAssetPaths(plan);
@@ -117,19 +117,21 @@ export function GharScreen() {
 
           const freshPlan = await refreshCurrentPlan();
           if (cancelled) return;
-          if (freshPlan) {
-            setPlan(freshPlan);
-            setInitialLoading(false);
-          }
+          setInitialLoading(false);
 
-          // 3. Download assets for current sub-stage (non-blocking, progress shown on card)
-          if (freshPlan?.payload_json) {
-            setDownloadPct(0);
-            const planData = JSON.parse(freshPlan.payload_json) as PlanNextResponse;
-            await downloadAssets(planData, (pct) => {
-              if (!cancelled) setDownloadPct(pct);
-            });
-            if (!cancelled) setDownloadPct(null);
+          if (freshPlan && 'locked' in freshPlan) {
+            navigation.navigate('Paywall', { next_available_at: freshPlan.next_available_at });
+          } else if (freshPlan) {
+            setPlan(freshPlan);
+            // 3. Download assets for current sub-stage (non-blocking, progress shown on card)
+            if (freshPlan.payload_json) {
+              setDownloadPct(0);
+              const planData = JSON.parse(freshPlan.payload_json) as NextPlanResponse;
+              await downloadAssets(planData, (pct) => {
+                if (!cancelled) setDownloadPct(pct);
+              });
+              if (!cancelled) setDownloadPct(null);
+            }
           }
 
         } catch (e) {

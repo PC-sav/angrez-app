@@ -16,6 +16,7 @@ import progressReducer from './slices/progressSlice';
 import puzzlesReducer from './slices/puzzlesSlice';
 import walletReducer from './slices/walletSlice';
 import uiReducer from './slices/uiSlice';
+import subscriptionReducer from './slices/subscriptionSlice';
 
 const rootReducer = combineReducers({
   user: userReducer,
@@ -23,13 +24,14 @@ const rootReducer = combineReducers({
   puzzles: puzzlesReducer,
   wallet: walletReducer,
   ui: uiReducer,
+  subscription: subscriptionReducer,
 });
 
 // Explicit whitelist: ui and puzzles are intentionally excluded
 const persistConfig = {
   key: 'root',
   storage: AsyncStorage,
-  whitelist: ['user', 'progress', 'wallet'],
+  whitelist: ['user', 'progress', 'wallet', 'subscription'],
 };
 
 const persistedReducer = persistReducer(persistConfig, rootReducer);

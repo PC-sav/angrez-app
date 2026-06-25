@@ -25,6 +25,22 @@ export const MAIN = {
     doneBadge:    '✓',
   },
 
+  paywall: {
+    title:        'आज की पढ़ाई पूरी!',
+    subtitle:     'मुफ़्त में 1 सब-स्टेज प्रतिदिन',
+    resetLabel:   (time: string) => `कल ${time} से फिर उपलब्ध`,
+    unlockTitle:  'अनलिमिटेड सीखें',
+    planNames:    { year: 'सालाना', month: 'मासिक', trial: '7 दिन' } as Record<string, string>,
+    planDuration: { year: '/साल', month: '/माह', trial: '7 दिनों के लिए' } as Record<string, string>,
+    bestValue:    'सबसे किफ़ायती',
+    campaign:     (name: string) => `${name} ऑफ़र`,
+    ctaButton:      'अभी लें',
+    stubNotice:     'भुगतान जल्द आ रहा है…',
+    closeLabel:     'बंद करें',
+    quotaRemaining: (n: number) => `${n} स्लॉट बचे`,
+    daysRemaining:  (n: number) => `${n} दिन बाकी`,
+  },
+
   profile: {
     greeting:           (name: string | null) => name ? `नमस्ते, ${name}!` : 'नमस्ते!',
     walletTitle:        'आपका बटुआ',

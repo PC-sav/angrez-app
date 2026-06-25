@@ -3,6 +3,7 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { mergeUser, setLoggedIn, logout } from '../store/slices/userSlice';
 import { setBootstrapped } from '../store/slices/uiSlice';
+import { setSubscription } from '../store/slices/subscriptionSlice';
 import { getToken, clearToken, api } from '../api';
 
 export function Bootstrap() {
@@ -25,6 +26,10 @@ export function Bootstrap() {
         console.log('[Bootstrap] /auth/me status:', status);
         dispatch(mergeUser(data));
         dispatch(setLoggedIn());
+        try {
+          const { data: sub } = await api.subscription.get();
+          dispatch(setSubscription(sub));
+        } catch { /* offline or server error — keep free default */ }
       } catch (err: any) {
         const status: number = err?.response?.status ?? 0;
         // Server may nest the code as data.code or data.error.code

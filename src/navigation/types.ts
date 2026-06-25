@@ -16,4 +16,5 @@ export type TabParamList = {
 export type MainStackParamList = {
   Tabs: undefined;
   LessonModal: { lessonId: string };
+  Paywall: { next_available_at: string };
 };

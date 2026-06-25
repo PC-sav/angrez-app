@@ -218,7 +218,8 @@ export interface SubstageCompleteResponse {
   message: string;
 }
 
-export interface PlanNextResponse {
+export interface NextPlanResponse {
+  locked?: false;
   pack_id: string;
   sub_stage_id: string;
   title_en: string;
@@ -229,6 +230,38 @@ export interface PlanNextResponse {
   teach: TeachItem[];
   practice: PracticeItem[];
   review: unknown[];
+}
+
+export interface LockedPlanResponse {
+  locked: true;
+  reason: 'daily_limit';
+  limit: number;
+  used: number;
+  next_available_at: string;
+}
+
+// Union: api.plan.next() returns one of these two shapes.
+// Discriminant: locked === true → LockedPlanResponse; absent/false → NextPlanResponse.
+export type PlanNextResponse = NextPlanResponse | LockedPlanResponse;
+
+export interface SubscriptionResponse {
+  plan: 'free' | 'trial' | 'month' | 'year';
+  status: 'none' | 'active' | 'expired';
+  current_period_end: string | null;
+}
+
+export interface PlanItem {
+  plan: 'year' | 'month' | 'trial';
+  base_amount: number;
+  campaign_price: number | null;
+  currency: string;
+  campaign_name: string | null;
+  quota_remaining: number | null;
+  ends_at: string | null;
+}
+
+export interface PlansResponse {
+  plans: PlanItem[];
 }
 
 type Opts = { signal?: AbortSignal };
@@ -290,5 +323,15 @@ export const api = {
         body,
         { signal: opts?.signal },
       ),
+  },
+
+  subscription: {
+    get: (opts?: Opts) =>
+      client.get<SubscriptionResponse>('/api/subscription', { signal: opts?.signal }),
+  },
+
+  plans: {
+    list: (opts?: Opts) =>
+      client.get<PlansResponse>('/api/plans', { signal: opts?.signal }),
   },
 };
