@@ -16,6 +16,7 @@
       }
     },
     "android": {
+      "newArchEnabled": true,
       "package": "com.angrez.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
