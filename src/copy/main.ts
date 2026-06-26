@@ -36,7 +36,7 @@ export const MAIN = {
     campaign:     (name: string) => `${name} ऑफ़र`,
     ctaButton:      'अभी लें',
     stubNotice:     'भुगतान जल्द आ रहा है…',
-    closeLabel:     'बंद करें',
+    closeLabel:     'अभी नहीं — कल वापस आओ',
     quotaRemaining: (n: number) => `${n} स्लॉट बचे`,
     daysRemaining:  (n: number) => `${n} दिन बाकी`,
   },

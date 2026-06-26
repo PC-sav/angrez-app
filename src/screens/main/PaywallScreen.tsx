@@ -102,7 +102,7 @@ export function PaywallScreen({ route, navigation }: Props) {
         {/* Header */}
         <View style={styles.header}>
           <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
-            <Text style={styles.closeLabel}>{MAIN.paywall.closeLabel} ✕</Text>
+            <Text style={styles.closeLabel}>{MAIN.paywall.closeLabel}</Text>
           </Pressable>
         </View>
 
