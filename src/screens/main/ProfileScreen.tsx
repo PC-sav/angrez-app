@@ -5,7 +5,10 @@ import {
 } from 'react-native';
 import Constants from 'expo-constants';
 
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
+import { selectIsFree } from '../../store/slices/subscriptionSlice';
 import { setWallet } from '../../store/slices/walletSlice';
 import { logout } from '../../store/slices/userSlice';
 import { api } from '../../api';
@@ -13,14 +16,20 @@ import { clearToken } from '../../api/client';
 import { persistor } from '../../store';
 import { getSubstageProgressCount } from '../../db/content';
 import { MAIN } from '../../copy/main';
+import { colors } from '../../theme';
+import type { MainStackParamList } from '../../navigation/types';
+
+type Nav = NativeStackNavigationProp<MainStackParamList>;
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 
 export function ProfileScreen() {
+  const navigation = useNavigation<Nav>();
   const dispatch   = useAppDispatch();
   const userName   = useAppSelector((s) => s.user.name);
   const refCode    = useAppSelector((s) => s.user.referral_code);
   const walletBal  = useAppSelector((s) => s.wallet.balance);
+  const isFree     = useAppSelector(selectIsFree);
 
   const [subStagesDone, setSubStagesDone] = useState(0);
 
@@ -102,6 +111,16 @@ export function ProfileScreen() {
           </Text>
         </View>
 
+        {/* Upgrade pill — only when subscription confirmed free */}
+        {isFree && (
+          <Pressable
+            style={styles.upgradePill}
+            onPress={() => navigation.navigate('Paywall', { source: 'upgrade' })}
+          >
+            <Text style={styles.upgradePillText}>{MAIN.paywall.upgradeButton}</Text>
+          </Pressable>
+        )}
+
         {/* Dev Reset (dev builds only) */}
         {__DEV__ && (
           <Pressable style={styles.devButton} onPress={handleDevReset}>
@@ -164,6 +183,14 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   devButtonText: { color: '#C0392B', fontSize: 13, fontWeight: '600' },
+
+  upgradePill: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  upgradePillText: { color: colors.surface, fontSize: 16, fontWeight: '700' },
 
   version: { textAlign: 'center', fontSize: 12, color: '#BBB', marginTop: 8 },
 });

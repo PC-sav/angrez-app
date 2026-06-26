@@ -9,6 +9,7 @@ import { File, Directory, Paths } from 'expo-file-system';
 
 import type { MainStackParamList } from '../../navigation/types';
 import { useAppSelector } from '../../store/hooks';
+import { selectIsFree } from '../../store/slices/subscriptionSlice';
 import { api, resolveAsset } from '../../api';
 import type { NextPlanResponse } from '../../api/endpoints';
 import {
@@ -17,6 +18,7 @@ import {
 } from '../../db/content';
 import type { CurrentPlanRow } from '../../db/content';
 import { MAIN } from '../../copy/main';
+import { colors } from '../../theme';
 
 type Nav = NativeStackNavigationProp<MainStackParamList>;
 
@@ -83,6 +85,7 @@ async function downloadAssets(
 export function GharScreen() {
   const navigation = useNavigation<Nav>();
   const userName = useAppSelector((s) => s.user.name);
+  const isFree   = useAppSelector(selectIsFree);
 
   const [plan, setPlan] = useState<CurrentPlanRow | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -120,7 +123,7 @@ export function GharScreen() {
           setInitialLoading(false);
 
           if (freshPlan && 'locked' in freshPlan) {
-            navigation.navigate('Paywall', { next_available_at: freshPlan.next_available_at });
+            navigation.navigate('Paywall', { source: 'limit', next_available_at: freshPlan.next_available_at });
           } else if (freshPlan) {
             setPlan(freshPlan);
             // 3. Download assets for current sub-stage (non-blocking, progress shown on card)
@@ -219,6 +222,16 @@ export function GharScreen() {
             <Text style={styles.cardSubtitle}>{MAIN.ghar.errorNoCache}</Text>
           </View>
         )}
+
+        {/* Understated upgrade entry — below the lesson card, low visual weight */}
+        {isFree && (
+          <Pressable
+            onPress={() => navigation.navigate('Paywall', { source: 'upgrade' })}
+            style={styles.upgradeLink}
+          >
+            <Text style={styles.upgradeLinkText}>{MAIN.paywall.upgradeButton}</Text>
+          </Pressable>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -281,6 +294,9 @@ const styles = StyleSheet.create({
   },
   progressFill: { height: '100%', backgroundColor: '#4A90D9', borderRadius: 2 },
   progressLabel: { fontSize: 12, color: '#888' },
+
+  upgradeLink:     { alignSelf: 'flex-end', paddingVertical: 4, paddingHorizontal: 2 },
+  upgradeLinkText: { fontSize: 13, color: colors.primary, fontWeight: '600' },
 
   downloadText: { fontSize: 12, color: '#888', fontStyle: 'italic' },
 

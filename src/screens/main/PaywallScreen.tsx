@@ -83,7 +83,9 @@ function PlanCard({ item, featured }: { item: PlanItem; featured: boolean }) {
 }
 
 export function PaywallScreen({ route, navigation }: Props) {
-  const { next_available_at } = route.params;
+  const params = route.params;
+  const isLimit = params.source === 'limit';
+
   const [plans, setPlans] = useState<PlanItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -94,7 +96,8 @@ export function PaywallScreen({ route, navigation }: Props) {
       .finally(() => setLoading(false));
   }, []);
 
-  const resetTime = formatISTReset(next_available_at);
+  // Guard: formatISTReset is only called in limit mode where next_available_at is defined.
+  const resetTime = isLimit ? formatISTReset(params.next_available_at) : null;
 
   return (
     <SafeAreaView style={styles.root}>
@@ -102,17 +105,25 @@ export function PaywallScreen({ route, navigation }: Props) {
         {/* Header */}
         <View style={styles.header}>
           <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
-            <Text style={styles.closeLabel}>{MAIN.paywall.closeLabel}</Text>
+            <Text style={styles.closeLabel}>
+              {isLimit ? MAIN.paywall.closeLabel : MAIN.paywall.upgradeCloseLabel}
+            </Text>
           </Pressable>
         </View>
 
         {/* Hero */}
         <View style={styles.heroCard}>
-          <Text style={styles.heroTitle}>{MAIN.paywall.title}</Text>
-          <Text style={styles.heroSubtitle}>{MAIN.paywall.subtitle}</Text>
-          <View style={styles.resetPill}>
-            <Text style={styles.resetText}>{MAIN.paywall.resetLabel(resetTime)}</Text>
-          </View>
+          <Text style={styles.heroTitle}>
+            {isLimit ? MAIN.paywall.title : MAIN.paywall.upgradeHero}
+          </Text>
+          {isLimit && (
+            <Text style={styles.heroSubtitle}>{MAIN.paywall.subtitle}</Text>
+          )}
+          {isLimit && resetTime !== null && (
+            <View style={styles.resetPill}>
+              <Text style={styles.resetText}>{MAIN.paywall.resetLabel(resetTime)}</Text>
+            </View>
+          )}
         </View>
 
         {/* Plan cards */}
