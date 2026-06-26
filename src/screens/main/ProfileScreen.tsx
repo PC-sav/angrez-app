@@ -121,10 +121,15 @@ export function ProfileScreen() {
           </Pressable>
         )}
 
-        {/* Dev Reset (dev builds only) */}
+        {/* Dev controls (dev builds only) */}
         {__DEV__ && (
           <Pressable style={styles.devButton} onPress={handleDevReset}>
             <Text style={styles.devButtonText}>⚙ DEV: Reset Auth</Text>
+          </Pressable>
+        )}
+        {__DEV__ && (
+          <Pressable style={styles.devButton} onPress={() => navigation.navigate('WebViewSmokeTest')}>
+            <Text style={styles.devButtonText}>⚙ DEV: WebView test</Text>
           </Pressable>
         )}
 

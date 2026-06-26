@@ -19,4 +19,5 @@ export type MainStackParamList = {
   Paywall:
     | { source: 'limit'; next_available_at: string }
     | { source: 'upgrade' };
+  WebViewSmokeTest: undefined;
 };
