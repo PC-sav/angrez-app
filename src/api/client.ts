@@ -1,38 +1,14 @@
 import axios from 'axios';
 import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
-import * as SecureStore from 'expo-secure-store';
 import { Alert } from 'react-native';
+
+import { getToken } from '../auth/token';
+import { signOut } from '../auth/signOut';
+
+export { TOKEN_KEY, getToken, saveToken, clearToken } from '../auth/token';
 
 export const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://api.angrez.app';
 const TIMEOUT_MS = 10_000;
-export const TOKEN_KEY = 'jwt_token';
-
-// ── Token helpers ────────────────────────────────────────────────────────────
-
-export async function getToken(): Promise<string | null> {
-  try {
-    return await SecureStore.getItemAsync(TOKEN_KEY);
-  } catch {
-    // SecureStore unavailable or read error — treat as logged out
-    return null;
-  }
-}
-
-export async function saveToken(token: string): Promise<void> {
-  try {
-    await SecureStore.setItemAsync(TOKEN_KEY, token);
-  } catch {
-    console.warn('[SecureStore] save failed');
-  }
-}
-
-export async function clearToken(): Promise<void> {
-  try {
-    await SecureStore.deleteItemAsync(TOKEN_KEY);
-  } catch {
-    // ignore — token may already be absent
-  }
-}
 
 // ── Axios instance ───────────────────────────────────────────────────────────
 
@@ -57,16 +33,13 @@ let logoutPromise: Promise<void> | null = null;
 
 function triggerLogout(): Promise<void> {
   if (!logoutPromise) {
-    logoutPromise = (async () => {
-      await clearToken();
-      // Lazy-require avoids a circular-import at module load time
-      const { store } = require('../store') as typeof import('../store');
-      const { logout } = require('../store/slices/userSlice') as typeof import('../store/slices/userSlice');
-      store.dispatch(logout());
-      Alert.alert('Session समाप्त', 'Phir se login karein', [{ text: 'ठीक है' }]);
-    })().finally(() => {
-      logoutPromise = null;
-    });
+    logoutPromise = signOut()
+      .then(() => {
+        Alert.alert('Session समाप्त', 'Phir se login karein', [{ text: 'ठीक है' }]);
+      })
+      .finally(() => {
+        logoutPromise = null;
+      });
   }
   return logoutPromise;
 }

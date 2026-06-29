@@ -10,10 +10,9 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { selectIsFree } from '../../store/slices/subscriptionSlice';
 import { setWallet } from '../../store/slices/walletSlice';
-import { logout } from '../../store/slices/userSlice';
 import { api } from '../../api';
-import { clearToken } from '../../api/client';
-import { persistor } from '../../store';
+import { signOut } from '../../auth/signOut';
+import { getPendingRows } from '../../db/sync';
 import { getSubstageProgressCount } from '../../db/content';
 import { MAIN } from '../../copy/main';
 import { colors } from '../../theme';
@@ -58,16 +57,32 @@ export function ProfileScreen() {
     }
   }
 
+  async function handleLogout() {
+    let pendingCount = 0;
+    try {
+      pendingCount = (await getPendingRows()).length;
+    } catch (e) {
+      console.warn('[handleLogout] pending check failed', e);
+    }
+    Alert.alert(
+      'लॉग आउट',
+      pendingCount > 0
+        ? 'कुछ जवाब अभी सेव नहीं हुए — लॉग आउट करने पर वो चले जाएंगे। फिर भी लॉग आउट करें?'
+        : 'क्या आप लॉग आउट करना चाहते हैं?',
+      [
+        { text: 'रद्द करें', style: 'cancel' },
+        { text: 'लॉग आउट', style: 'destructive', onPress: async () => { await signOut(); } },
+      ],
+    );
+  }
+
   async function handleDevReset() {
     Alert.alert('Dev Reset', 'Clear JWT + Redux state and restart auth flow?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Reset',
         style: 'destructive',
-        onPress: async () => {
-          await Promise.all([persistor.purge(), clearToken()]);
-          dispatch(logout());
-        },
+        onPress: async () => { await signOut(); },
       },
     ]);
   }
@@ -120,6 +135,11 @@ export function ProfileScreen() {
             <Text style={styles.upgradePillText}>{MAIN.paywall.upgradeButton}</Text>
           </Pressable>
         )}
+
+        {/* Logout */}
+        <Pressable style={styles.logoutButton} onPress={handleLogout}>
+          <Text style={styles.logoutButtonText}>लॉग आउट</Text>
+        </Pressable>
 
         {/* Dev controls (dev builds only) */}
         {__DEV__ && (
@@ -177,6 +197,19 @@ const styles = StyleSheet.create({
   whatsappButtonText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 
   statText: { fontSize: 16, fontWeight: '600', color: '#1A1A2E' },
+
+  logoutButton: {
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  logoutButtonText: {
+    color: colors.primary,
+    fontSize: 16,
+    fontWeight: '600',
+  },
 
   devButton: {
     borderWidth: 1,
