@@ -264,6 +264,17 @@ export interface PlansResponse {
   plans: PlanItem[];
 }
 
+// Request has NO amount field — invariant #1: client never sends a price.
+export interface PaymentOrderRequest {
+  plan: string;
+}
+
+export interface PaymentOrderResponse {
+  order_id: string;
+  payment_session_id: string;
+  amount: number;
+}
+
 type Opts = { signal?: AbortSignal };
 
 // ── Typed API functions (Contract v1) ────────────────────────────────────────
@@ -333,5 +344,10 @@ export const api = {
   plans: {
     list: (opts?: Opts) =>
       client.get<PlansResponse>('/api/plans', { signal: opts?.signal }),
+  },
+
+  payments: {
+    order: (body: PaymentOrderRequest, opts?: Opts) =>
+      client.post<PaymentOrderResponse>('/api/payments/order', body, { signal: opts?.signal }),
   },
 };

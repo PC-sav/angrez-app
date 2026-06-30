@@ -25,4 +25,6 @@ export type {
   LessonResultBody,
   LessonResultResponse,
   SubstageCompleteResponse,
+  PaymentOrderRequest,
+  PaymentOrderResponse,
 } from './endpoints';

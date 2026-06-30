@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { TabNavigator } from './TabNavigator';
 import { LessonModal } from '../screens/lesson/LessonModal';
 import { PaywallScreen } from '../screens/main/PaywallScreen';
+import { CheckoutScreen } from '../screens/main/CheckoutScreen';
 import { WebViewSmokeTest } from '../screens/dev/WebViewSmokeTest';
 import type { MainStackParamList } from './types';
 
@@ -20,6 +21,11 @@ export function MainNavigator() {
       <Stack.Screen
         name="Paywall"
         component={PaywallScreen}
+        options={{ presentation: 'fullScreenModal' }}
+      />
+      <Stack.Screen
+        name="Checkout"
+        component={CheckoutScreen}
         options={{ presentation: 'fullScreenModal' }}
       />
       <Stack.Screen name="WebViewSmokeTest" component={WebViewSmokeTest} />

@@ -31,14 +31,18 @@ function formatISTReset(isoString: string): string {
   return `${h12}:${mm} ${ampm}`;
 }
 
-function PlanCard({ item, featured }: { item: PlanItem; featured: boolean }) {
+function PlanCard({
+  item, featured, onSelectPlan, disabled, loading,
+}: {
+  item: PlanItem;
+  featured: boolean;
+  onSelectPlan: () => void;
+  disabled: boolean;
+  loading: boolean;
+}) {
   const effectivePrice = item.campaign_price ?? item.base_amount;
   const name = MAIN.paywall.planNames[item.plan] ?? item.plan;
   const duration = MAIN.paywall.planDuration[item.plan] ?? '';
-
-  function handleUpgrade() {
-    Alert.alert('जल्द आ रहा है', MAIN.paywall.stubNotice);
-  }
 
   return (
     <View style={[styles.planCard, featured && styles.planCardFeatured]}>
@@ -71,12 +75,17 @@ function PlanCard({ item, featured }: { item: PlanItem; featured: boolean }) {
         </View>
       </View>
       <Pressable
-        style={[styles.ctaButton, featured && styles.ctaButtonFeatured]}
-        onPress={handleUpgrade}
+        style={[styles.ctaButton, featured && styles.ctaButtonFeatured, disabled && styles.ctaButtonDisabled]}
+        onPress={onSelectPlan}
+        disabled={disabled}
       >
-        <Text style={[styles.ctaText, featured && styles.ctaTextFeatured]}>
-          {MAIN.paywall.ctaButton}
-        </Text>
+        {loading ? (
+          <ActivityIndicator size="small" color={featured ? colors.surface : colors.text} />
+        ) : (
+          <Text style={[styles.ctaText, featured && styles.ctaTextFeatured]}>
+            {MAIN.paywall.ctaButton}
+          </Text>
+        )}
       </Pressable>
     </View>
   );
@@ -88,6 +97,7 @@ export function PaywallScreen({ route, navigation }: Props) {
 
   const [plans, setPlans] = useState<PlanItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [orderingPlan, setOrderingPlan] = useState<string | null>(null);
 
   useEffect(() => {
     api.plans.list()
@@ -95,6 +105,24 @@ export function PaywallScreen({ route, navigation }: Props) {
       .catch(() => { /* keep empty — cards simply won't render */ })
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleSelectPlan(plan: string) {
+    if (orderingPlan) return;
+    setOrderingPlan(plan);
+    try {
+      const { data } = await api.payments.order({ plan });
+      navigation.navigate('Checkout', {
+        payment_session_id: data.payment_session_id,
+        order_id: data.order_id,
+        plan,
+        amount: data.amount,
+      });
+    } catch {
+      Alert.alert('कुछ गड़बड़ हो गई', 'दोबारा कोशिश करें।');
+    } finally {
+      setOrderingPlan(null);
+    }
+  }
 
   // Guard: formatISTReset is only called in limit mode where next_available_at is defined.
   const resetTime = isLimit ? formatISTReset(params.next_available_at) : null;
@@ -132,7 +160,14 @@ export function PaywallScreen({ route, navigation }: Props) {
           <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />
         ) : (
           plans.map((item, i) => (
-            <PlanCard key={item.plan} item={item} featured={i === 0} />
+            <PlanCard
+              key={item.plan}
+              item={item}
+              featured={i === 0}
+              onSelectPlan={() => handleSelectPlan(item.plan)}
+              disabled={orderingPlan !== null}
+              loading={orderingPlan === item.plan}
+            />
           ))
         )}
       </ScrollView>
@@ -238,7 +273,8 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     alignItems: 'center',
   },
-  ctaButtonFeatured: { backgroundColor: colors.primary },
-  ctaText:           { fontSize: 15, fontWeight: '700', color: colors.text },
-  ctaTextFeatured:   { color: colors.surface },
+  ctaButtonFeatured:  { backgroundColor: colors.primary },
+  ctaButtonDisabled:  { opacity: 0.55 },
+  ctaText:            { fontSize: 15, fontWeight: '700', color: colors.text },
+  ctaTextFeatured:    { color: colors.surface },
 });

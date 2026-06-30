@@ -19,5 +19,11 @@ export type MainStackParamList = {
   Paywall:
     | { source: 'limit'; next_available_at: string }
     | { source: 'upgrade' };
+  Checkout: {
+    payment_session_id: string;
+    order_id: string;
+    plan: string;
+    amount: number;
+  };
   WebViewSmokeTest: undefined;
 };
