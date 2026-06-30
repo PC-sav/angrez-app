@@ -4,7 +4,7 @@ import {
   ActivityIndicator, Linking, Alert, SafeAreaView,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
-import type { ShouldStartLoadRequest, WebViewNavigation } from 'react-native-webview';
+import type { ShouldStartLoadRequest, WebViewNavigation } from 'react-native-webview/lib/WebViewTypes';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { MainStackParamList } from '../../navigation/types';
 import { colors } from '../../theme';
@@ -145,7 +145,7 @@ export function CheckoutScreen({ route, navigation }: Props) {
       <WebView
         ref={webViewRef}
         style={styles.webview}
-        source={{ html: buildBootstrapHtml(payment_session_id) }}
+        source={{ html: buildBootstrapHtml(payment_session_id), baseUrl: 'https://sandbox.cashfree.com' }}
         originWhitelist={['*']}
         javaScriptEnabled
         domStorageEnabled
@@ -182,7 +182,8 @@ const styles = StyleSheet.create({
   webview: { flex: 1 },
 
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
