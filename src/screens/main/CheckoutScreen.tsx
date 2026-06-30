@@ -1,8 +1,11 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, Pressable, StyleSheet,
-  ActivityIndicator, Linking, Alert, SafeAreaView,
+  ActivityIndicator, Linking, Alert, SafeAreaView, AppState,
 } from 'react-native';
+import { useAppDispatch } from '../../store/hooks';
+import { setSubscription } from '../../store/slices/subscriptionSlice';
+import { api } from '../../api';
 import { WebView } from 'react-native-webview';
 import type { ShouldStartLoadRequest, WebViewNavigation } from 'react-native-webview/lib/WebViewTypes';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -39,17 +42,23 @@ window.onload = function() {
 </body></html>`;
 }
 
-// Phase transitions:
-//   webview  →  (sentinel or AppState-resume)  →  polling   [Block 3 fills in poll loop]
-//   polling  →  (poll resolves)                →  done      [Block 4 fills in result UI]
-type Phase = 'webview' | 'polling';
+type PollResult = 'active' | 'processing' | 'failed';
+type Phase = 'webview' | 'polling' | 'done';
+
+const POLL_INTERVAL_MS = 2_000;
+const MAX_POLLS = 12;
 
 export function CheckoutScreen({ route, navigation }: Props) {
   const { payment_session_id, order_id, plan, amount } = route.params;
 
-  const [phase, setPhase] = useState<Phase>('webview');
-  const webViewRef  = useRef<WebView>(null);
-  const sentinelRef = useRef(false); // guard: sentinel fires exactly once
+  const dispatch = useAppDispatch();
+
+  const [phase, setPhase]   = useState<Phase>('webview');
+  const [result, setResult] = useState<PollResult | null>(null);
+
+  const webViewRef      = useRef<WebView>(null);
+  const sentinelRef     = useRef(false); // guard: sentinel fires exactly once
+  const upiLinkFiredRef = useRef(false); // AppState backstop: only poll on resume if UPI was opened
 
   // Called by both onShouldStartLoadWithRequest (primary) and
   // onNavigationStateChange (backup). Sets phase to 'polling' once.
@@ -73,8 +82,9 @@ export function CheckoutScreen({ route, navigation }: Props) {
     }
 
     // UPI deep links: hand to the OS so the payment app can open.
-    // Block 3's AppState-resume backstop handles the return path.
+    // Set upiLinkFiredRef so the AppState-resume backstop knows to start polling on return.
     if (UPI_SCHEME_RE.test(url)) {
+      upiLinkFiredRef.current = true;
       Linking.openURL(url).catch(() => {
         console.warn('[Checkout] Linking.openURL failed for scheme:', url.split(':')[0]);
       });
@@ -117,9 +127,110 @@ export function CheckoutScreen({ route, navigation }: Props) {
     );
   }
 
+  // ── Poll loop ─────────────────────────────────────────────────────────────
+  // Runs once when phase transitions to 'polling'.
+  // Two terminal states: ACTIVE (webhook landed before attempts exhausted),
+  // PROCESSING (attempts exhausted without active — ambiguous, never 'failed').
+  // A clean 200 with status !== 'active' is normal in-flight state; keep polling.
+  useEffect(() => {
+    if (phase !== 'polling') return;
+
+    let cancelled = false;
+    let attempts  = 0;
+    let timer: ReturnType<typeof setTimeout>;
+
+    async function runPoll() {
+      if (cancelled) return;
+      attempts += 1; // every call consumes an attempt, including 503 — no infinite loop
+
+      try {
+        const { data } = await api.subscription.get();
+        if (cancelled) return;
+
+        if (data === null) {
+          // 503: axios interceptor resolved with {data:null} after its own retries.
+          // attempt was already consumed above — a persistent 503 reaches MAX_POLLS
+          // and falls through to 'processing', never loops forever.
+          if (attempts < MAX_POLLS) {
+            timer = setTimeout(runPoll, POLL_INTERVAL_MS);
+          } else {
+            setResult('processing');
+            setPhase('done');
+          }
+          return;
+        }
+
+        if (data.status === 'active') {
+          dispatch(setSubscription({
+            plan: data.plan,
+            status: data.status,
+            current_period_end: data.current_period_end,
+          }));
+          setResult('active');
+          setPhase('done');
+          return;
+        }
+
+        // Clean non-active (e.g. 'none' | 'expired') — webhook hasn't landed yet.
+        if (attempts >= MAX_POLLS) {
+          setResult('processing');
+          setPhase('done');
+          return;
+        }
+        timer = setTimeout(runPoll, POLL_INTERVAL_MS);
+      } catch {
+        if (cancelled) return;
+        if (attempts < MAX_POLLS) {
+          timer = setTimeout(runPoll, POLL_INTERVAL_MS);
+        } else {
+          setResult('processing');
+          setPhase('done');
+        }
+      }
+    }
+
+    runPoll();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [phase, dispatch]);
+
+  // ── AppState backstop ──────────────────────────────────────────────────────
+  // When a UPI deep link fires, the user leaves the app. On return, if the sentinel
+  // hasn't already fired (e.g. Cashfree redirect didn't reach us), trigger polling.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active' && upiLinkFiredRef.current) {
+        handleSentinel();
+      }
+    });
+    return () => sub.remove();
+  // handleSentinel is stable (only touches refs + setPhase); empty deps is correct.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── 'done' phase — minimal gate UI (Block 4 replaces with full result screen) ──
+  if (phase === 'done') {
+    const icon  = result === 'active' ? '✓' : result === 'processing' ? '⏳' : '✗';
+    const title =
+      result === 'active'     ? 'पेमेंट सफल!'       :
+      result === 'processing' ? 'पेमेंट जाँच रही है' :
+                                'पेमेंट नहीं हुई';
+    return (
+      <SafeAreaView style={styles.root}>
+        <View style={styles.center}>
+          <Text style={styles.resultIcon}>{icon}</Text>
+          <Text style={styles.resultTitle}>{title}</Text>
+          <Pressable style={styles.doneButton} onPress={() => navigation.goBack()}>
+            <Text style={styles.doneButtonText}>ठीक है</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   // ── Polling phase ─────────────────────────────────────────────────────────
-  // Block 3 replaces this stub with the actual GET /api/subscription poll loop,
-  // AppState-resume listener, and three honest result states.
   if (phase === 'polling') {
     return (
       <SafeAreaView style={styles.root}>
@@ -191,4 +302,15 @@ const styles = StyleSheet.create({
 
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   pollingText: { fontSize: 16, fontWeight: '600', color: colors.text },
+
+  resultIcon:  { fontSize: 48 },
+  resultTitle: { fontSize: 20, fontWeight: '700', color: colors.text, textAlign: 'center' },
+  doneButton: {
+    marginTop: 8,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+  },
+  doneButtonText: { fontSize: 16, fontWeight: '700', color: colors.surface },
 });
