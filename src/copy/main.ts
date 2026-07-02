@@ -44,6 +44,26 @@ export const MAIN = {
     daysRemaining:  (n: number) => `${n} दिन बाकी`,
   },
 
+  checkout: {
+    result: {
+      active: {
+        headline: 'पेमेंट सफल!',
+        subtext:  'आपका प्लान चालू हो गया। अब बिना रुकावट पढ़ाई करें।',
+        cta:      'सीखना शुरू करें',
+      },
+      processing: {
+        headline: 'पेमेंट की पुष्टि हो रही है',
+        subtext:  'अगर पैसे कट गए हैं तो थोड़ी देर में चालू हो जाएगा — दोबारा पैसे न दें।',
+        cta:      'ठीक है',
+      },
+      failed: {
+        headline: 'पेमेंट पूरी नहीं हुई',
+        subtext:  'कोई पैसे नहीं कटे। आप फिर से कोशिश कर सकते हैं।',
+        cta:      'फिर कोशिश करें',
+      },
+    },
+  },
+
   profile: {
     greeting:           (name: string | null) => name ? `नमस्ते, ${name}!` : 'नमस्ते!',
     walletTitle:        'आपका बटुआ',

@@ -275,6 +275,11 @@ export interface PaymentOrderResponse {
   amount: number;
 }
 
+export interface OrderStatusResponse {
+  order_id: string;
+  status: 'CREATED' | 'PAID' | 'FAILED' | 'DROPPED';
+}
+
 type Opts = { signal?: AbortSignal };
 
 // ── Typed API functions (Contract v1) ────────────────────────────────────────
@@ -349,5 +354,8 @@ export const api = {
   payments: {
     order: (body: PaymentOrderRequest, opts?: Opts) =>
       client.post<PaymentOrderResponse>('/api/payments/order', body, { signal: opts?.signal }),
+
+    orderStatus: (orderId: string, opts?: Opts) =>
+      client.get<OrderStatusResponse>(`/api/payments/order/${orderId}`, { signal: opts?.signal }),
   },
 };

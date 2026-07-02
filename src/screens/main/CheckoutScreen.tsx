@@ -11,6 +11,7 @@ import type { ShouldStartLoadRequest, WebViewNavigation } from 'react-native-web
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { MainStackParamList } from '../../navigation/types';
 import { colors } from '../../theme';
+import { MAIN } from '../../copy/main';
 
 export type CheckoutParams = MainStackParamList['Checkout'];
 type Props = NativeStackScreenProps<MainStackParamList, 'Checkout'>;
@@ -128,10 +129,16 @@ export function CheckoutScreen({ route, navigation }: Props) {
   }
 
   // ── Poll loop ─────────────────────────────────────────────────────────────
-  // Runs once when phase transitions to 'polling'.
-  // Two terminal states: ACTIVE (webhook landed before attempts exhausted),
-  // PROCESSING (attempts exhausted without active — ambiguous, never 'failed').
-  // A clean 200 with status !== 'active' is normal in-flight state; keep polling.
+  // Each tick fetches both /api/subscription and /api/payments/order/:id in parallel.
+  //
+  // Resolution priority (in order):
+  //   1. subscription.status === 'active'           → ACTIVE   (highest — money confirmed)
+  //   2. order.status === 'FAILED' | 'DROPPED'      → FAILED   (only source of 'failed')
+  //   3. budget exhausted                           → PROCESSING (never 'failed' on timeout)
+  //   4. otherwise (CREATED, or either 503)         → keep polling
+  //
+  // A PAID order that outlasts the poll budget → PROCESSING, never FAILED.
+  // setResult('failed') appears in EXACTLY ONE place: the FAILED/DROPPED branch below.
   useEffect(() => {
     if (phase !== 'polling') return;
 
@@ -141,42 +148,50 @@ export function CheckoutScreen({ route, navigation }: Props) {
 
     async function runPoll() {
       if (cancelled) return;
-      attempts += 1; // every call consumes an attempt, including 503 — no infinite loop
+      attempts += 1; // consumed unconditionally — persistent 503 drains to PROCESSING
 
       try {
-        const { data } = await api.subscription.get();
+        const [subRes, orderRes] = await Promise.all([
+          api.subscription.get(),
+          api.payments.orderStatus(order_id),
+        ]);
         if (cancelled) return;
 
-        if (data === null) {
-          // 503: axios interceptor resolved with {data:null} after its own retries.
-          // attempt was already consumed above — a persistent 503 reaches MAX_POLLS
-          // and falls through to 'processing', never loops forever.
-          if (attempts < MAX_POLLS) {
-            timer = setTimeout(runPoll, POLL_INTERVAL_MS);
-          } else {
-            setResult('processing');
-            setPhase('done');
-          }
-          return;
-        }
+        const subData   = subRes.data;
+        const orderData = orderRes.data;
 
-        if (data.status === 'active') {
+        // Priority 1: subscription active — entitlement live, regardless of order status.
+        if (subData !== null && subData.status === 'active') {
           dispatch(setSubscription({
-            plan: data.plan,
-            status: data.status,
-            current_period_end: data.current_period_end,
+            plan: subData.plan,
+            status: subData.status,
+            current_period_end: subData.current_period_end,
           }));
           setResult('active');
           setPhase('done');
           return;
         }
 
-        // Clean non-active (e.g. 'none' | 'expired') — webhook hasn't landed yet.
+        // Priority 2: order definitively rejected — stop immediately.
+        // THIS IS THE ONLY PLACE setResult('failed') IS CALLED.
+        if (
+          orderData !== null &&
+          (orderData.status === 'FAILED' || orderData.status === 'DROPPED')
+        ) {
+          setResult('failed');
+          setPhase('done');
+          return;
+        }
+
+        // Priority 3: budget exhausted — ambiguous (webhook in-flight, or PAID but sub
+        // propagating). Money may have been captured; 'processing' is the honest answer.
         if (attempts >= MAX_POLLS) {
           setResult('processing');
           setPhase('done');
           return;
         }
+
+        // CREATED or either endpoint 503'd (data === null) — keep polling.
         timer = setTimeout(runPoll, POLL_INTERVAL_MS);
       } catch {
         if (cancelled) return;
@@ -194,7 +209,7 @@ export function CheckoutScreen({ route, navigation }: Props) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [phase, dispatch]);
+  }, [phase, dispatch, order_id]);
 
   // ── AppState backstop ──────────────────────────────────────────────────────
   // When a UPI deep link fires, the user leaves the app. On return, if the sentinel
@@ -210,20 +225,39 @@ export function CheckoutScreen({ route, navigation }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── 'done' phase — minimal gate UI (Block 4 replaces with full result screen) ──
+  // ── 'done' phase ──────────────────────────────────────────────────────────
   if (phase === 'done') {
-    const icon  = result === 'active' ? '✓' : result === 'processing' ? '⏳' : '✗';
-    const title =
-      result === 'active'     ? 'पेमेंट सफल!'       :
-      result === 'processing' ? 'पेमेंट जाँच रही है' :
-                                'पेमेंट नहीं हुई';
+    const isActive     = result === 'active';
+    const isProcessing = result === 'processing';
+
+    // Icon character and accent color — all tokens, zero hardcoded hex.
+    const iconChar    = isActive ? '✓' : isProcessing ? '⏳' : '○';
+    const accentColor = isActive ? colors.success : isProcessing ? colors.warning : colors.textSecondary;
+    // CTA background: success green for active; primary blue for processing/failed (neutral action).
+    const ctaColor    = isActive ? colors.success : colors.primary;
+
+    const copy = isActive
+      ? MAIN.checkout.result.active
+      : isProcessing
+      ? MAIN.checkout.result.processing
+      : MAIN.checkout.result.failed;
+
+    // active: clear both Checkout + Paywall modals, land on Ghar.
+    // processing / failed: go back to Paywall so user can retry or dismiss.
+    const handleCta = isActive
+      ? () => navigation.navigate('Tabs')
+      : () => navigation.goBack();
+
     return (
       <SafeAreaView style={styles.root}>
         <View style={styles.center}>
-          <Text style={styles.resultIcon}>{icon}</Text>
-          <Text style={styles.resultTitle}>{title}</Text>
-          <Pressable style={styles.doneButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.doneButtonText}>ठीक है</Text>
+          <View style={[styles.resultIconRing, { borderColor: accentColor }]}>
+            <Text style={[styles.resultIconChar, { color: accentColor }]}>{iconChar}</Text>
+          </View>
+          <Text style={styles.resultHeadline}>{copy.headline}</Text>
+          <Text style={styles.resultSubtext}>{copy.subtext}</Text>
+          <Pressable style={[styles.resultCta, { backgroundColor: ctaColor }]} onPress={handleCta}>
+            <Text style={styles.resultCtaText}>{copy.cta}</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -303,14 +337,34 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   pollingText: { fontSize: 16, fontWeight: '600', color: colors.text },
 
-  resultIcon:  { fontSize: 48 },
-  resultTitle: { fontSize: 20, fontWeight: '700', color: colors.text, textAlign: 'center' },
-  doneButton: {
+  resultIconRing: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultIconChar:  { fontSize: 32, fontWeight: '700' },
+  resultHeadline: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: colors.text,
+    textAlign: 'center',
+    paddingHorizontal: 24,
+  },
+  resultSubtext: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    paddingHorizontal: 32,
+  },
+  resultCta: {
     marginTop: 8,
     paddingHorizontal: 32,
     paddingVertical: 14,
-    backgroundColor: colors.primary,
     borderRadius: 12,
   },
-  doneButtonText: { fontSize: 16, fontWeight: '700', color: colors.surface },
+  resultCtaText: { fontSize: 16, fontWeight: '700', color: colors.surface },
 });

@@ -27,4 +27,5 @@ export type {
   SubstageCompleteResponse,
   PaymentOrderRequest,
   PaymentOrderResponse,
+  OrderStatusResponse,
 } from './endpoints';
