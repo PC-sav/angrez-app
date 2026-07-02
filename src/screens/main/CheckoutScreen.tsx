@@ -75,8 +75,9 @@ export function CheckoutScreen({ route, navigation }: Props) {
   function handleShouldStartLoad(request: ShouldStartLoadRequest): boolean {
     const { url } = request;
 
-    // Sentinel: Cashfree redirects here after payment (success or failure).
+    // Sentinel: Cashfree redirects here on SUCCESS only.
     // The route 404s on the server — block it and use it as a signal only.
+    // Failure is caught via the /checkout/?error intercept in handleNavigationStateChange.
     if (url.includes('/payment/complete')) {
       handleSentinel();
       return false;
@@ -101,6 +102,13 @@ export function CheckoutScreen({ route, navigation }: Props) {
   function handleNavigationStateChange(navState: WebViewNavigation) {
     if (navState.url.includes('/payment/complete')) {
       webViewRef.current?.stopLoading();
+      handleSentinel();
+      return;
+    }
+    // Cashfree navigates to its own error page on failure (/checkout/?error=…).
+    // Observe-only: don't stopLoading — let Cashfree's page stay rendered.
+    // handleSentinel() flips phase to 'polling'; the poll reads server truth.
+    if (navState.url.includes('/checkout/?error')) {
       handleSentinel();
     }
   }
