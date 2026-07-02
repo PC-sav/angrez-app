@@ -28,4 +28,5 @@ export type {
   PaymentOrderRequest,
   PaymentOrderResponse,
   OrderStatusResponse,
+  FounderStatusResponse,
 } from './endpoints';

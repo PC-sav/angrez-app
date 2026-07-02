@@ -280,6 +280,10 @@ export interface OrderStatusResponse {
   status: 'CREATED' | 'PAID' | 'FAILED' | 'DROPPED';
 }
 
+export type FounderStatusResponse =
+  | { is_founder: false }
+  | { is_founder: true; claimed: boolean; founder_bonus_points: number; via: 'first_n' | 'waitlist' };
+
 type Opts = { signal?: AbortSignal };
 
 // ── Typed API functions (Contract v1) ────────────────────────────────────────
@@ -357,5 +361,13 @@ export const api = {
 
     orderStatus: (orderId: string, opts?: Opts) =>
       client.get<OrderStatusResponse>(`/api/payments/order/${orderId}`, { signal: opts?.signal }),
+  },
+
+  founder: {
+    status: (opts?: Opts) =>
+      client.get<FounderStatusResponse>('/api/founder/status', { signal: opts?.signal }),
+
+    claim: (opts?: Opts) =>
+      client.post<FounderStatusResponse>('/api/founder/claim', {}, { signal: opts?.signal }),
   },
 };

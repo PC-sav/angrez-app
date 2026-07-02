@@ -64,6 +64,20 @@ export const MAIN = {
     },
   },
 
+  founder: {
+    cardTitle:  'संस्थापक सदस्य',
+    unclaimed: {
+      headline: 'आप Angrez के पहले साथियों में हैं!',
+      subtext:  'अपने संस्थापक बोनस का दावा करें।',
+      cta:      (points: number) => `+${points} अंक पाएँ`,
+    },
+    claimed: {
+      headline: 'संस्थापक बोनस मिल गया ✓',
+      subtext:  (points: number) => `+${points} अंक आपके बटुए में जुड़ गए।`,
+    },
+    errorRetry: 'फिर कोशिश करें',
+  },
+
   profile: {
     greeting:           (name: string | null) => name ? `नमस्ते, ${name}!` : 'नमस्ते!',
     walletTitle:        'आपका बटुआ',

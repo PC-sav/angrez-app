@@ -9,8 +9,9 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { selectIsFree } from '../../store/slices/subscriptionSlice';
-import { setWallet } from '../../store/slices/walletSlice';
+import { setWallet, credit } from '../../store/slices/walletSlice';
 import { api } from '../../api';
+import type { FounderStatusResponse } from '../../api';
 import { signOut } from '../../auth/signOut';
 import { getPendingRows } from '../../db/sync';
 import { getSubstageProgressCount } from '../../db/content';
@@ -30,13 +31,22 @@ export function ProfileScreen() {
   const walletBal  = useAppSelector((s) => s.wallet.balance);
   const isFree     = useAppSelector(selectIsFree);
 
-  const [subStagesDone, setSubStagesDone] = useState(0);
+  const [subStagesDone, setSubStagesDone]     = useState(0);
+  const [founderStatus, setFounderStatus]     = useState<FounderStatusResponse | null>(null);
+  const [claiming, setClaiming]               = useState(false);
 
   // Load sub-stages count from DB on mount
   useEffect(() => {
     getSubstageProgressCount()
       .then(setSubStagesDone)
       .catch(() => { /* DB unavailable — keep 0 */ });
+  }, []);
+
+  // Fetch founder status on mount; null while loading — card stays hidden until resolved.
+  useEffect(() => {
+    api.founder.status()
+      .then(({ data }) => { if (data !== null) setFounderStatus(data); })
+      .catch(() => { /* network failure — card stays hidden */ });
   }, []);
 
   // Refresh wallet from server on mount; show cached Redux value first
@@ -47,6 +57,22 @@ export function ProfileScreen() {
       })
       .catch(() => { /* network failure — keep cached value */ });
   }, [dispatch]);
+
+  async function handleClaim() {
+    if (claiming) return;
+    setClaiming(true);
+    try {
+      const { data } = await api.founder.claim();
+      if (data !== null && data.is_founder) {
+        dispatch(credit(data.founder_bonus_points));
+        setFounderStatus(data);
+      }
+    } catch {
+      // Leave unclaimed — button re-enables so user can retry.
+    } finally {
+      setClaiming(false);
+    }
+  }
 
   async function handleWhatsAppShare() {
     if (!refCode) return;
@@ -103,6 +129,34 @@ export function ProfileScreen() {
             {MAIN.profile.walletBalance(walletBal)}
           </Text>
         </View>
+
+        {/* Founder card — hidden while loading (null) or when is_founder: false */}
+        {founderStatus !== null && founderStatus.is_founder && (
+          founderStatus.claimed ? (
+            <View style={styles.founderCard}>
+              <Text style={styles.founderCardTitle}>{MAIN.founder.cardTitle}</Text>
+              <Text style={styles.founderHeadline}>{MAIN.founder.claimed.headline}</Text>
+              <Text style={styles.founderSubtext}>
+                {MAIN.founder.claimed.subtext(founderStatus.founder_bonus_points)}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.founderCard}>
+              <Text style={styles.founderCardTitle}>{MAIN.founder.cardTitle}</Text>
+              <Text style={styles.founderHeadline}>{MAIN.founder.unclaimed.headline}</Text>
+              <Text style={styles.founderSubtext}>{MAIN.founder.unclaimed.subtext}</Text>
+              <Pressable
+                style={[styles.founderCta, claiming && styles.founderCtaDisabled]}
+                onPress={handleClaim}
+                disabled={claiming}
+              >
+                <Text style={styles.founderCtaText}>
+                  {claiming ? '…' : MAIN.founder.unclaimed.cta(founderStatus.founder_bonus_points)}
+                </Text>
+              </Pressable>
+            </View>
+          )
+        )}
 
         {/* Referral card */}
         {refCode ? (
@@ -197,6 +251,49 @@ const styles = StyleSheet.create({
   whatsappButtonText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 
   statText: { fontSize: 16, fontWeight: '600', color: '#1A1A2E' },
+
+  founderCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 2,
+    borderColor: colors.warning, // gold-placeholder — repaints at theme migration
+    gap: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  founderCardTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.warning, // gold-placeholder — repaints at theme migration
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  founderHeadline: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#1A1A2E',
+  },
+  founderSubtext: {
+    fontSize: 14,
+    color: '#666666',
+    lineHeight: 20,
+  },
+  founderCta: {
+    backgroundColor: colors.warning, // gold-placeholder — repaints at theme migration
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  founderCtaDisabled: { opacity: 0.55 },
+  founderCtaText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
 
   logoutButton: {
     borderWidth: 1,
