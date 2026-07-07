@@ -8,8 +8,14 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { MainStackParamList } from '../../navigation/types';
 import { api } from '../../api';
 import type { PlanItem } from '../../api/endpoints';
+import { useAppSelector } from '../../store/hooks';
 import { MAIN } from '../../copy/main';
 import { colors } from '../../theme';
+import {
+  initBilling, endBilling, getPlanProducts, purchasePlan,
+  resolvePurchaseTarget, wirePurchaseListeners, isUserCancelled,
+  type PlanKey, type PlanOffer, type PlanProduct,
+} from '../../services/billing';
 
 type Props = NativeStackScreenProps<MainStackParamList, 'Paywall'>;
 
@@ -31,22 +37,71 @@ function formatISTReset(isoString: string): string {
   return `${h12}:${mm} ${ampm}`;
 }
 
+// A price we display must be a price Play will charge — never render a server
+// price as purchasable (W4). 'loading': the first getPlanProducts() call hasn't
+// settled yet — distinct from 'unavailable' so the paywall never flashes
+// "price unavailable" before billing has even had a chance to answer.
+// 'unavailable': settled, but products didn't load / fetch failed, retrying may
+// help. 'ineligible': the product loaded fine but this specific offer (the
+// trial's intro offer) isn't available for this user — de-emphasized, not a
+// retry candidate (flagged choice: de-emphasize, not hide, so the paywall's
+// card count/layout doesn't shift based on eligibility state).
+type PriceState =
+  | { kind: 'loading' }
+  | { kind: 'ready'; offer: PlanOffer }
+  | { kind: 'unavailable' }
+  | { kind: 'ineligible' };
+
+function resolvePriceState(
+  item: PlanItem,
+  products: Map<PlanKey, PlanProduct>,
+  productsSettled: boolean,
+): PriceState {
+  if (!productsSettled) return { kind: 'loading' };
+  const { planKey, offerChoice } = resolvePurchaseTarget(item.plan);
+  const product = products.get(planKey);
+  if (!product) return { kind: 'unavailable' };
+  const offer = offerChoice === 'trial' ? product.introOffer : product.baseOffer;
+  if (!offer) return offerChoice === 'trial' ? { kind: 'ineligible' } : { kind: 'unavailable' };
+  return { kind: 'ready', offer };
+}
+
+// Early-bird strike-through sanity guard: only show "was ₹base_amount" when the
+// server thinks a campaign discount is active AND Play's actual charge is
+// genuinely lower than base_amount — Play doesn't know about our backend's
+// campaigns, so a strike-through must never imply savings Play won't honour.
+// priceAmountMicros is exposed by billing.ts for exactly this comparison; if it
+// can't be parsed, fall back to gating on campaign_price !== null alone (a
+// deliberately looser guard than the parsed-micros path, per instruction).
+function shouldShowStrike(item: PlanItem, priceState: PriceState): boolean {
+  if (item.campaign_price === null || priceState.kind !== 'ready') return false;
+  const micros = Number(priceState.offer.priceAmountMicros);
+  if (!Number.isFinite(micros) || micros <= 0) return true; // can't verify — gate on campaign_price alone
+  return micros / 1_000_000 < item.base_amount;
+}
+
 function PlanCard({
-  item, featured, onSelectPlan, disabled, loading,
+  item, featured, priceState, onSelectPlan, onRetry, disabled, loading,
 }: {
   item: PlanItem;
   featured: boolean;
+  priceState: PriceState;
   onSelectPlan: () => void;
+  onRetry: () => void;
   disabled: boolean;
   loading: boolean;
 }) {
-  const effectivePrice = item.campaign_price ?? item.base_amount;
   const name = MAIN.paywall.planNames[item.plan] ?? item.plan;
   const duration = MAIN.paywall.planDuration[item.plan] ?? '';
+  const purchasable = priceState.kind === 'ready';
 
   return (
-    <View style={[styles.planCard, featured && styles.planCardFeatured]}>
-      {featured && (
+    <View style={[
+      styles.planCard,
+      featured && styles.planCardFeatured,
+      !purchasable && styles.planCardDisabled,
+    ]}>
+      {featured && purchasable && (
         <View style={styles.bestValueBadge}>
           <Text style={styles.bestValueText}>{MAIN.paywall.bestValue}</Text>
         </View>
@@ -65,28 +120,48 @@ function PlanCard({
       <View style={styles.planRow}>
         <Text style={[styles.planName, featured && styles.planNameFeatured]}>{name}</Text>
         <View style={styles.priceBlock}>
-          {item.campaign_price !== null && (
-            <Text style={styles.strikePrice}>₹{item.base_amount}</Text>
+          {priceState.kind === 'loading' ? (
+            <ActivityIndicator size="small" color={colors.textMuted} />
+          ) : priceState.kind === 'ready' ? (
+            <>
+              {shouldShowStrike(item, priceState) && (
+                <Text style={styles.strikePrice}>₹{item.base_amount}</Text>
+              )}
+              <Text style={[styles.price, featured && styles.priceFeatured]}>
+                {priceState.offer.formattedPrice}
+              </Text>
+              <Text style={styles.duration}>{duration}</Text>
+            </>
+          ) : (
+            <Text style={styles.priceUnavailableText}>
+              {priceState.kind === 'ineligible' ? MAIN.paywall.introRedeemed : MAIN.paywall.priceUnavailable}
+            </Text>
           )}
-          <Text style={[styles.price, featured && styles.priceFeatured]}>
-            ₹{effectivePrice}
-          </Text>
-          <Text style={styles.duration}>{duration}</Text>
         </View>
       </View>
-      <Pressable
-        style={[styles.ctaButton, featured && styles.ctaButtonFeatured, disabled && styles.ctaButtonDisabled]}
-        onPress={onSelectPlan}
-        disabled={disabled}
-      >
-        {loading ? (
-          <ActivityIndicator size="small" color={featured ? colors.surface : colors.text} />
-        ) : (
-          <Text style={[styles.ctaText, featured && styles.ctaTextFeatured]}>
-            {MAIN.paywall.ctaButton}
-          </Text>
-        )}
-      </Pressable>
+      {priceState.kind === 'unavailable' ? (
+        <Pressable style={styles.retryButton} onPress={onRetry}>
+          <Text style={styles.retryText}>{MAIN.paywall.retryLine}</Text>
+        </Pressable>
+      ) : (
+        <Pressable
+          style={[
+            styles.ctaButton,
+            featured && styles.ctaButtonFeatured,
+            (disabled || !purchasable) && styles.ctaButtonDisabled,
+          ]}
+          onPress={onSelectPlan}
+          disabled={disabled || !purchasable}
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color={featured ? colors.surface : colors.text} />
+          ) : (
+            <Text style={[styles.ctaText, featured && styles.ctaTextFeatured]}>
+              {MAIN.paywall.ctaButton}
+            </Text>
+          )}
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -94,33 +169,74 @@ function PlanCard({
 export function PaywallScreen({ route, navigation }: Props) {
   const params = route.params;
   const isLimit = params.source === 'limit';
+  const userId = useAppSelector((s) => s.user.id);
 
   const [plans, setPlans] = useState<PlanItem[]>([]);
+  const [products, setProducts] = useState<Map<PlanKey, PlanProduct>>(new Map());
+  const [productsSettled, setProductsSettled] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [orderingPlan, setOrderingPlan] = useState<string | null>(null);
+  const [purchasingPlan, setPurchasingPlan] = useState<string | null>(null);
+
+  // productsSettled starts false and flips to true exactly once the first call
+  // resolves or rejects — setting it again on a later retry is a harmless no-op,
+  // so no separate "first call only" bookkeeping is needed. This is what
+  // prevents the "कीमत लोड नहीं हुई" (price unavailable) copy from flashing
+  // before billing has even had a chance to answer.
+  function loadBillingProducts() {
+    initBilling()
+      .then(() => getPlanProducts())
+      .then(setProducts)
+      .catch((err) => console.warn('[Paywall] billing init/product fetch failed', err))
+      .finally(() => setProductsSettled(true));
+  }
 
   useEffect(() => {
+    let cancelled = false;
+
     api.plans.list()
-      .then(({ data }) => setPlans(data.plans))
+      .then(({ data }) => { if (!cancelled) setPlans(data.plans); })
       .catch(() => { /* keep empty — cards simply won't render */ })
-      .finally(() => setLoading(false));
+      .finally(() => { if (!cancelled) setLoading(false); });
+
+    loadBillingProducts();
+
+    return () => { cancelled = true; };
+  // loadBillingProducts is stable (module-level functions only); empty deps is correct.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function handleSelectPlan(plan: string) {
-    if (orderingPlan) return;
-    setOrderingPlan(plan);
+  useEffect(() => {
+    const unwire = wirePurchaseListeners({
+      onSuccess: () => {
+        setPurchasingPlan(null);
+        navigation.navigate('PurchaseResult');
+      },
+      onError: (error) => {
+        setPurchasingPlan(null);
+        if (isUserCancelled(error)) return; // silent return to Paywall — no alert, no navigation
+        Alert.alert(MAIN.checkout.result.failed.headline, MAIN.checkout.result.failed.subtext);
+      },
+    });
+    return () => {
+      unwire();
+      endBilling();
+    };
+  // navigation is stable per react-navigation's guarantee; wiring once on mount is correct.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleSelectPlan(item: PlanItem) {
+    if (purchasingPlan || !userId) return;
+    const { planKey, offerChoice } = resolvePurchaseTarget(item.plan);
+    setPurchasingPlan(item.plan);
     try {
-      const { data } = await api.payments.order({ plan });
-      navigation.navigate('Checkout', {
-        payment_session_id: data.payment_session_id,
-        order_id: data.order_id,
-        plan,
-        amount: data.amount,
-      });
+      await purchasePlan(planKey, offerChoice, userId);
+      // Outcome arrives asynchronously via wirePurchaseListeners, not here (invariant #1).
     } catch {
-      Alert.alert('कुछ गड़बड़ हो गई', 'दोबारा कोशिश करें।');
-    } finally {
-      setOrderingPlan(null);
+      // Synchronous dispatch failure (not connected, no cached offer, store
+      // validation error) — same warm-failed treatment as an async purchaseError.
+      setPurchasingPlan(null);
+      Alert.alert(MAIN.checkout.result.failed.headline, MAIN.checkout.result.failed.subtext);
     }
   }
 
@@ -164,9 +280,11 @@ export function PaywallScreen({ route, navigation }: Props) {
               key={item.plan}
               item={item}
               featured={i === 0}
-              onSelectPlan={() => handleSelectPlan(item.plan)}
-              disabled={orderingPlan !== null}
-              loading={orderingPlan === item.plan}
+              priceState={resolvePriceState(item, products, productsSettled)}
+              onSelectPlan={() => handleSelectPlan(item)}
+              onRetry={loadBillingProducts}
+              disabled={purchasingPlan !== null}
+              loading={purchasingPlan === item.plan}
             />
           ))
         )}
@@ -233,6 +351,9 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     borderWidth: 2,
   },
+  planCardDisabled: {
+    opacity: 0.6,
+  },
 
   bestValueBadge: {
     alignSelf: 'flex-start',
@@ -266,6 +387,7 @@ const styles = StyleSheet.create({
   price:        { fontSize: 22, fontWeight: '800', color: colors.text },
   priceFeatured:{ color: colors.primary },
   duration:     { fontSize: 12, color: colors.textSecondary },
+  priceUnavailableText: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
 
   ctaButton: {
     backgroundColor: colors.border,
@@ -277,4 +399,13 @@ const styles = StyleSheet.create({
   ctaButtonDisabled:  { opacity: 0.55 },
   ctaText:            { fontSize: 15, fontWeight: '700', color: colors.text },
   ctaTextFeatured:    { color: colors.surface },
+
+  retryButton: {
+    borderRadius: 12,
+    paddingVertical: 13,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  retryText: { fontSize: 14, fontWeight: '700', color: colors.primary },
 });

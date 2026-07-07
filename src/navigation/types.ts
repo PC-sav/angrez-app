@@ -25,5 +25,7 @@ export type MainStackParamList = {
     plan: string;
     amount: number;
   };
+  PurchaseResult: undefined;
   WebViewSmokeTest: undefined;
+  BillingDevTest: undefined;
 };

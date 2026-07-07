@@ -206,6 +206,11 @@ export function ProfileScreen() {
             <Text style={styles.devButtonText}>⚙ DEV: WebView test</Text>
           </Pressable>
         )}
+        {__DEV__ && (
+          <Pressable style={styles.devButton} onPress={() => navigation.navigate('BillingDevTest')}>
+            <Text style={styles.devButtonText}>⚙ DEV: Billing test</Text>
+          </Pressable>
+        )}
 
         {/* App version */}
         <Text style={styles.version}>{MAIN.profile.version(APP_VERSION)}</Text>

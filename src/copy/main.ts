@@ -42,6 +42,9 @@ export const MAIN = {
     upgradeCloseLabel: 'बंद करें',
     quotaRemaining: (n: number) => `${n} स्लॉट बचे`,
     daysRemaining:  (n: number) => `${n} दिन बाकी`,
+    priceUnavailable: 'कीमत लोड नहीं हुई',
+    retryLine:        'दोबारा कोशिश करें',
+    introRedeemed:    'यह ऑफ़र इस्तेमाल हो चुका है',
   },
 
   checkout: {
