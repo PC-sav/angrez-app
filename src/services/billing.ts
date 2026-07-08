@@ -8,9 +8,9 @@
  * the request; the outcome is delivered later via wirePurchaseListeners().
  *
  * Product/plan map mirrors the backend exactly — angrez/src/services/playBilling.ts
- * PRODUCT_ID_TO_PLAN. Keep the two in sync; a mismatch here silently fails closed
- * (unknown productId → no offer found → purchasePlan throws before ever reaching
- * the store), it does not silently charge the wrong plan.
+ * BASE_PLAN_ID_TO_PLAN. Keep the two in sync; a mismatch here silently fails
+ * closed (no offer found for the expected base plan → purchasePlan throws
+ * before ever reaching the store), it does not silently charge the wrong plan.
  */
 
 import {
@@ -31,14 +31,25 @@ import {
 export type PlanKey = 'month' | 'year';
 export type OfferChoice = 'trial' | 'base';
 
-// Must match angrez/src/services/playBilling.ts PRODUCT_ID_TO_PLAN exactly —
-// these are Play Console product IDs (Block 0, P0.12), not our internal plan names.
+// Must match angrez/src/services/playBilling.ts exactly — these are Play
+// Console product IDs (Block 0, P0.12), not our internal plan names.
 const PLAN_TO_PRODUCT_ID: Record<PlanKey, string> = {
   month: 'angrez_month',
   year: 'angrez_year',
 };
 
 const ALL_PRODUCT_IDS = Object.values(PLAN_TO_PRODUCT_ID);
+
+// Play Console BASE PLAN IDs (Block 0, P0.12) — NOT the top-level productId. A
+// single product can carry more than one base plan: angrez_month currently has
+// a dead prepaid base plan literally named "monthly" alongside the real
+// "monthly-std". Must match angrez/src/services/playBilling.ts BASE_PLAN_ID_TO_PLAN
+// exactly. Filtering offers by this before selectOffers() is what keeps the
+// dead plan's offers from ever being considered.
+const PLAN_TO_BASE_PLAN_ID: Record<PlanKey, string> = {
+  month: 'monthly-std',
+  year: 'yearly',
+};
 
 export interface PlanOffer {
   offerToken: string;
@@ -98,6 +109,12 @@ export async function endBilling(): Promise<void> {
 // base plan always present as a single-phase entry. Confirm against a real
 // product at the S-gate / Block 3 device test and switch to `subscriptionOffers`
 // if its semantics turn out to be safe.
+//
+// Callers MUST pre-filter `offers` to a single basePlanId before calling this
+// (see getPlanProducts) — a product can carry more than one base plan (e.g. the
+// dead "monthly" prepaid plan alongside "monthly-std"), and this function has
+// no way to tell them apart on its own; it only distinguishes base vs. intro
+// offers WITHIN whatever list it's given.
 function selectOffers(offers: ProductSubscriptionAndroidOfferDetails[]): {
   base: PlanOffer | null;
   intro: PlanOffer | null;
@@ -141,7 +158,16 @@ export async function getPlanProducts(): Promise<Map<PlanKey, PlanProduct>> {
     const product = products.find((p) => p.id === productId);
     if (!product) continue; // not found — pre-Block-0, or a Play Console/map mismatch
 
-    const { base, intro } = selectOffers(product.subscriptionOfferDetailsAndroid ?? []);
+    // Filter to our known-good base plan before selecting offers — a product
+    // can carry more than one base plan (the dead "monthly" prepaid plan
+    // alongside "monthly-std"), and offers under the wrong one must never be
+    // considered, even accidentally.
+    const basePlanId = PLAN_TO_BASE_PLAN_ID[planKey];
+    const relevantOffers = (product.subscriptionOfferDetailsAndroid ?? []).filter(
+      (o) => o.basePlanId === basePlanId,
+    );
+
+    const { base, intro } = selectOffers(relevantOffers);
     map.set(planKey, { planKey, productId, title: product.title, baseOffer: base, introOffer: intro });
   }
 
