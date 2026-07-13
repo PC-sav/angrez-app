@@ -17,28 +17,48 @@ export default function App() {
   const prevConnected = useRef<boolean | null>(null);
 
   useEffect(() => {
-    initDatabase();
-  }, []);
+    let cancelled = false;
+    let unsubNetInfo: ReturnType<typeof NetInfo.addEventListener> | null = null;
+    let sub: ReturnType<typeof AppState.addEventListener> | null = null;
 
-  useEffect(() => {
-    // NetInfo: drain when connection flips false → true (covers in-foreground reconnect).
-    const unsubNetInfo = NetInfo.addEventListener((state) => {
-      const connected = state.isConnected === true;
-      if (!prevConnected.current && connected) {
-        drain();
+    (async () => {
+      try {
+        await initDatabase();
+      } catch (e) {
+        // Not fatal downstream — getPendingRows() already returns [] on a
+        // missing-table error — but this is a chase-it signal, log loudly.
+        console.error('[App] initDatabase failed — sync queue may be unavailable this session', e);
       }
-      prevConnected.current = connected;
-    });
 
-    // AppState: drain when app returns to foreground (covers pocket-and-reopen).
-    const handleAppState = (nextState: AppStateStatus) => {
-      if (nextState === 'active') drain();
-    };
-    const sub = AppState.addEventListener('change', handleAppState);
+      if (cancelled) return;
+
+      // Cold-start / kill-and-relaunch coverage: AppState never fires a
+      // change→active event on cold launch (already 'active' at mount —
+      // confirmed from RN's AppState source), so this is the only path that
+      // drains rows queued before this launch. drain()'s own mutex makes the
+      // very next NetInfo/AppState firing immediately after a safe no-op.
+      drain();
+
+      // NetInfo: drain when connection flips false → true (covers in-foreground reconnect).
+      unsubNetInfo = NetInfo.addEventListener((state) => {
+        const connected = state.isConnected === true;
+        if (!prevConnected.current && connected) {
+          drain();
+        }
+        prevConnected.current = connected;
+      });
+
+      // AppState: drain when app returns to foreground (covers pocket-and-reopen).
+      const handleAppState = (nextState: AppStateStatus) => {
+        if (nextState === 'active') drain();
+      };
+      sub = AppState.addEventListener('change', handleAppState);
+    })();
 
     return () => {
-      unsubNetInfo();
-      sub.remove();
+      cancelled = true;
+      unsubNetInfo?.();
+      sub?.remove();
     };
   }, []);
 
