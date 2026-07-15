@@ -19,6 +19,8 @@ export const AUTH = {
     placeholder: 'दस अंक',
     button: 'OTP भेजें',
     relogin: 'फिर से लॉगिन करें',
+    referralLabel: 'दोस्त का रेफ़रल कोड है? (ऑप्शनल)',
+    referralPlaceholder: 'रेफ़रल कोड',
   },
 
   otp: {

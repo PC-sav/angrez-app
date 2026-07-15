@@ -29,4 +29,5 @@ export type {
   PaymentOrderResponse,
   OrderStatusResponse,
   FounderStatusResponse,
+  ReferralStatusResponse,
 } from './endpoints';

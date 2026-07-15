@@ -88,9 +88,12 @@ export const MAIN = {
     referralTitle:      'दोस्तों को बुलाएँ',
     referralCode:       (code: string) => `आपका कोड: ${code}`,
     whatsappShare:      'WhatsApp पर शेयर करें',
-    // TODO: replace [App link coming soon] with Play Store / App Store URL at launch
     whatsappMessage:    (code: string) =>
-      `Angrez के साथ अंग्रेज़ी सीखें! मेरा referral code है: ${code}\n\n[App link coming soon]`,
+      `Angrez के साथ अंग्रेज़ी सीखो — मुफ़्त में शुरू करो! मेरा रेफ़रल कोड डालना: ${code}\n\nhttps://play.google.com/store/apps/details?id=com.angrez.app`,
+    referralInvited:    (n: number) => `${n} दोस्त इनवाइट किए`,
+    referralConverted:  (n: number) => `${n} प्रीमियम लिए`,
+    referralPoints:     (n: number) => `${n} पॉइंट्स कमाए`,
+    referralCondition:  'जब आपका दोस्त प्रीमियम लेता है, आपको +500 पॉइंट्स',
     subStagesCompleted: (n: number) => `अब तक पूरे किए: ${n} सब-स्टेज`,
     version:            (v: string) => `Version ${v}`,
   },

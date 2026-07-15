@@ -1,7 +1,7 @@
 export type AuthStackParamList = {
   LanguagePick: undefined;
   Phone: undefined;
-  Otp: { phone: string; devOtp?: string };
+  Otp: { phone: string; devOtp?: string; referral_code?: string };
   OnboardingName: undefined;
   OnboardingGoal: { name: string | null };
   OnboardingDailyTime: { name: string | null; goal: string };

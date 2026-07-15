@@ -29,7 +29,7 @@ export function OtpScreen() {
   const route      = useRoute<Route>();
   const dispatch   = useAppDispatch();
 
-  const { phone, devOtp } = route.params;
+  const { phone, devOtp, referral_code } = route.params;
 
   const [code, setCode]         = useState('');
   const [loading, setLoading]   = useState(false);
@@ -58,7 +58,13 @@ export function OtpScreen() {
     setLoading(true);
     setMessage(null);
     try {
-      const { data } = await api.auth.verifyOtp({ phone, code });
+      // Pass regardless of isNewUser — the server decides eligibility.
+      // Key omitted entirely when empty (never referral_code: '').
+      const { data } = await api.auth.verifyOtp({
+        phone,
+        code,
+        ...(referral_code ? { referral_code } : {}),
+      });
       await saveToken(data.token);
       dispatch(mergeUser(data.user));
       if (data.isNewUser) {
@@ -76,7 +82,7 @@ export function OtpScreen() {
     } finally {
       setLoading(false);
     }
-  }, [code, phone, loading, dispatch, navigation]);
+  }, [code, phone, referral_code, loading, dispatch, navigation]);
 
   const handleResend = useCallback(async () => {
     if (!canResend) return;

@@ -22,6 +22,7 @@ type Nav = NativeStackNavigationProp<AuthStackParamList, 'Phone'>;
 export function PhoneScreen() {
   const navigation = useNavigation<Nav>();
   const [phone, setPhone]     = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
 
@@ -36,7 +37,14 @@ export function PhoneScreen() {
     setError(null);
     try {
       const { data } = await api.auth.requestOtp({ phone });
-      navigation.navigate('Otp', { phone, devOtp: data?.devOtp });
+      // Trim/uppercase only — no client-side validation beyond that. The
+      // server owns eligibility, self-referral blocking, everything.
+      const trimmedReferral = referralCode.trim().toUpperCase();
+      navigation.navigate('Otp', {
+        phone,
+        devOtp: data?.devOtp,
+        ...(trimmedReferral ? { referral_code: trimmedReferral } : {}),
+      });
     } catch {
       setError(AUTH.otp.rateLimited);
     } finally {
@@ -72,6 +80,20 @@ export function PhoneScreen() {
               returnKeyType="done"
               onSubmitEditing={handleSubmit}
               autoFocus
+            />
+          </View>
+
+          <View style={styles.referralField}>
+            <Text style={styles.referralLabel}>{AUTH.phone.referralLabel}</Text>
+            <TextInput
+              style={styles.referralInput}
+              value={referralCode}
+              onChangeText={(t) => setReferralCode(t.toUpperCase())}
+              placeholder={AUTH.phone.referralPlaceholder}
+              placeholderTextColor="#BBB"
+              autoCapitalize="characters"
+              autoCorrect={false}
+              returnKeyType="done"
             />
           </View>
 
@@ -151,6 +173,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 16,
     letterSpacing: 2,
+  },
+  referralField: {
+    width: '100%',
+    marginTop: 4,
+  },
+  referralLabel: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 6,
+  },
+  referralInput: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#DDD',
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1A1A2E',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    letterSpacing: 1,
   },
   errorText: {
     fontSize: 13,

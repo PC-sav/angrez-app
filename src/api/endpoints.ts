@@ -284,6 +284,14 @@ export type FounderStatusResponse =
   | { is_founder: false }
   | { is_founder: true; claimed: boolean; founder_bonus_points: number; via: 'first_n' | 'waitlist' };
 
+// Aggregate counts only — GET /api/referral/status has no per-referee list
+// endpoint (out of scope, no backend support).
+export interface ReferralStatusResponse {
+  total_referrals: number;
+  converted: number;
+  points_earned: number;
+}
+
 type Opts = { signal?: AbortSignal };
 
 // ── Typed API functions (Contract v1) ────────────────────────────────────────
@@ -369,5 +377,10 @@ export const api = {
 
     claim: (opts?: Opts) =>
       client.post<FounderStatusResponse>('/api/founder/claim', {}, { signal: opts?.signal }),
+  },
+
+  referral: {
+    status: (opts?: Opts) =>
+      client.get<ReferralStatusResponse>('/api/referral/status', { signal: opts?.signal }),
   },
 };

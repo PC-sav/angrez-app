@@ -11,7 +11,7 @@ import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { selectIsFree } from '../../store/slices/subscriptionSlice';
 import { setWallet, credit } from '../../store/slices/walletSlice';
 import { api } from '../../api';
-import type { FounderStatusResponse } from '../../api';
+import type { FounderStatusResponse, ReferralStatusResponse } from '../../api';
 import { signOut } from '../../auth/signOut';
 import { getPendingRows } from '../../db/sync';
 import { getSubstageProgressCount } from '../../db/content';
@@ -34,6 +34,7 @@ export function ProfileScreen() {
   const [subStagesDone, setSubStagesDone]     = useState(0);
   const [founderStatus, setFounderStatus]     = useState<FounderStatusResponse | null>(null);
   const [claiming, setClaiming]               = useState(false);
+  const [referralStatus, setReferralStatus]   = useState<ReferralStatusResponse | null>(null);
 
   // Load sub-stages count from DB on mount
   useEffect(() => {
@@ -47,6 +48,13 @@ export function ProfileScreen() {
     api.founder.status()
       .then(({ data }) => { if (data !== null) setFounderStatus(data); })
       .catch(() => { /* network failure — card stays hidden */ });
+  }, []);
+
+  // Fetch referral status on mount; null while loading — stats stay hidden until resolved.
+  useEffect(() => {
+    api.referral.status()
+      .then(({ data }) => { if (data !== null) setReferralStatus(data); })
+      .catch(() => { /* network failure — stats stay hidden */ });
   }, []);
 
   // Refresh wallet from server on mount; show cached Redux value first
@@ -165,6 +173,22 @@ export function ProfileScreen() {
             <Text style={styles.referralCode}>
               {MAIN.profile.referralCode(refCode)}
             </Text>
+            {referralStatus !== null && (
+              <View style={styles.referralStats}>
+                <Text style={styles.referralStatLine}>
+                  {MAIN.profile.referralInvited(referralStatus.total_referrals)}
+                </Text>
+                <Text style={styles.referralStatLine}>
+                  {MAIN.profile.referralConverted(referralStatus.converted)}
+                </Text>
+                <Text style={styles.referralStatLine}>
+                  {MAIN.profile.referralPoints(referralStatus.points_earned)}
+                </Text>
+                <Text style={styles.referralConditionText}>
+                  {MAIN.profile.referralCondition}
+                </Text>
+              </View>
+            )}
             <Pressable style={styles.whatsappButton} onPress={handleWhatsAppShare}>
               <Text style={styles.whatsappButtonText}>
                 {MAIN.profile.whatsappShare}
@@ -246,6 +270,9 @@ const styles = StyleSheet.create({
   walletBalance: { fontSize: 36, fontWeight: '800', color: '#1A1A2E' },
 
   referralCode: { fontSize: 16, fontWeight: '600', color: '#1A1A2E', letterSpacing: 1 },
+  referralStats: { gap: 4, marginTop: 2 },
+  referralStatLine: { fontSize: 14, color: colors.textSecondary },
+  referralConditionText: { fontSize: 12, color: colors.textMuted, marginTop: 4, lineHeight: 17 },
   whatsappButton: {
     backgroundColor: '#25D366',
     borderRadius: 12,
