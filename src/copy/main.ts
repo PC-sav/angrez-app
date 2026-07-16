@@ -96,5 +96,19 @@ export const MAIN = {
     referralCondition:  'जब आपका दोस्त प्रीमियम लेता है, आपको +500 पॉइंट्स',
     subStagesCompleted: (n: number) => `अब तक पूरे किए: ${n} सब-स्टेज`,
     version:            (v: string) => `Version ${v}`,
+    shareCardButton:    'प्रोग्रेस कार्ड शेयर करें',
+  },
+
+  shareCard: {
+    wordmark:       'Angrez',
+    tagline:        'अपना English teacher',
+    headlineProgress: (n: number) => `${n} सब-स्टेज पूरे!`,
+    subStagesStat:  (n: number) => `${n} सब-स्टेज पूरे`,
+    pointsStat:     (n: number) => `${n} पॉइंट्स कमाए`,
+    referralLabel:  (code: string) => `मेरा रेफ़रल कोड: ${code}`,
+    footer:         'मुफ़्त में शुरू करो · angrez.in',
+    shareButton:    'शेयर करें',
+    closeLabel:     'बंद करें',
+    shareError:     'शेयर नहीं हो पाया — दोबारा कोशिश करें',
   },
 } as const;

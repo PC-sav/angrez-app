@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, Pressable, StyleSheet,
-  SafeAreaView, ScrollView, Share, Alert,
+  SafeAreaView, ScrollView, Share, Alert, Modal, ActivityIndicator,
 } from 'react-native';
 import Constants from 'expo-constants';
+import { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
 
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -17,6 +19,7 @@ import { getPendingRows } from '../../db/sync';
 import { getSubstageProgressCount } from '../../db/content';
 import { MAIN } from '../../copy/main';
 import { colors } from '../../theme';
+import { ShareCard, SHARE_CARD_SIZE } from '../../components/ShareCard';
 import type { MainStackParamList } from '../../navigation/types';
 
 type Nav = NativeStackNavigationProp<MainStackParamList>;
@@ -35,6 +38,11 @@ export function ProfileScreen() {
   const [founderStatus, setFounderStatus]     = useState<FounderStatusResponse | null>(null);
   const [claiming, setClaiming]               = useState(false);
   const [referralStatus, setReferralStatus]   = useState<ReferralStatusResponse | null>(null);
+
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [sharing, setSharing]                     = useState(false);
+  const [shareError, setShareError]               = useState<string | null>(null);
+  const shareCardRef = useRef<View>(null);
 
   // Load sub-stages count from DB on mount
   useEffect(() => {
@@ -88,6 +96,31 @@ export function ProfileScreen() {
       await Share.share({ message: MAIN.profile.whatsappMessage(refCode) });
     } catch {
       // User cancelled or share unavailable — ignore
+    }
+  }
+
+  function openShareModal() {
+    setShareError(null);
+    setShareModalVisible(true);
+  }
+
+  function closeShareModal() {
+    setShareModalVisible(false);
+    setShareError(null);
+  }
+
+  async function handleShareCard() {
+    if (sharing || !shareCardRef.current) return;
+    setSharing(true);
+    setShareError(null);
+    try {
+      const uri = await captureRef(shareCardRef, { format: 'png', quality: 0.9, width: 1080, height: 1080 });
+      await Sharing.shareAsync(uri, { mimeType: 'image/png' });
+    } catch (e) {
+      console.warn('[ShareCard] capture/share failed', e);
+      setShareError(MAIN.shareCard.shareError);
+    } finally {
+      setSharing(false);
     }
   }
 
@@ -194,6 +227,11 @@ export function ProfileScreen() {
                 {MAIN.profile.whatsappShare}
               </Text>
             </Pressable>
+            <Pressable style={styles.shareCardButton} onPress={openShareModal}>
+              <Text style={styles.shareCardButtonText}>
+                {MAIN.profile.shareCardButton}
+              </Text>
+            </Pressable>
           </View>
         ) : null}
 
@@ -239,6 +277,45 @@ export function ProfileScreen() {
         {/* App version */}
         <Text style={styles.version}>{MAIN.profile.version(APP_VERSION)}</Text>
       </ScrollView>
+
+      {refCode && (
+        <Modal
+          visible={shareModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={closeShareModal}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalContent}>
+              <ShareCard
+                ref={shareCardRef}
+                name={userName}
+                headline={MAIN.shareCard.headlineProgress(subStagesDone)}
+                subStagesDone={subStagesDone}
+                walletPoints={walletBal}
+                referralCode={refCode}
+              />
+
+              {shareError && <Text style={styles.shareErrorText}>{shareError}</Text>}
+
+              <Pressable
+                style={[styles.shareModalCta, sharing && styles.shareModalCtaDisabled]}
+                onPress={handleShareCard}
+                disabled={sharing}
+              >
+                {sharing
+                  ? <ActivityIndicator color={colors.surface} />
+                  : <Text style={styles.shareModalCtaText}>{MAIN.shareCard.shareButton}</Text>
+                }
+              </Pressable>
+
+              <Pressable onPress={closeShareModal}>
+                <Text style={styles.modalCloseText}>{MAIN.shareCard.closeLabel}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -281,6 +358,15 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   whatsappButtonText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+
+  shareCardButton: {
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 13,
+    alignItems: 'center',
+  },
+  shareCardButtonText: { color: colors.primary, fontSize: 15, fontWeight: '700' },
 
   statText: { fontSize: 16, fontWeight: '600', color: '#1A1A2E' },
 
@@ -360,4 +446,39 @@ const styles = StyleSheet.create({
   upgradePillText: { color: colors.surface, fontSize: 16, fontWeight: '700' },
 
   version: { textAlign: 'center', fontSize: 12, color: '#BBB', marginTop: 8 },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    width: SHARE_CARD_SIZE + 40,
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
+    gap: 14,
+  },
+  shareErrorText: {
+    fontSize: 13,
+    color: colors.warning,
+    textAlign: 'center',
+  },
+  shareModalCta: {
+    width: '100%',
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  shareModalCtaDisabled: { opacity: 0.55 },
+  shareModalCtaText: { color: colors.surface, fontSize: 16, fontWeight: '700' },
+  modalCloseText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
 });
